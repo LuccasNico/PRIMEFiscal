@@ -14,7 +14,7 @@ from app.schemas.nota_fiscal import (
     NotaFiscalResposta,
     StatusNota,
 )
-from app.services.extrator_ia import ErroExtracao
+from app.services.ia import ErroExtracao
 from app.services.processamento import Abordagem, processar_pdf
 from app.services.validacao import validar_nota
 

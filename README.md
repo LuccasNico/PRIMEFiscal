@@ -21,7 +21,9 @@ frontend/   Interface React + Vite
 
 - Python 3.12+
 - Node.js 20+
-- Uma chave da [Claude API](https://console.anthropic.com/) (uso pago por token)
+- Um provedor de IA, à escolha (`PROVEDOR_IA` no `.env`):
+  - **Claude API:** chave em [console.anthropic.com](https://console.anthropic.com/) (uso pago por token);
+  - **LM Studio:** modelo local e gratuito (veja abaixo).
 
 ### Backend
 
@@ -30,13 +32,21 @@ cd backend
 python -m venv .venv
 .venv\Scripts\activate          # Windows (Linux/macOS: source .venv/bin/activate)
 pip install -r requirements.txt
-copy .env.example .env          # e preencha ANTHROPIC_API_KEY
+copy .env.example .env          # escolha o PROVEDOR_IA e preencha as variáveis dele
 uvicorn app.main:app --reload
 ```
 
 API em `http://localhost:8000` e documentação interativa em `http://localhost:8000/docs`.
 
 Testes: `pytest`
+
+### Usando um modelo local (LM Studio)
+
+1. Instale o [LM Studio](https://lmstudio.ai/) e baixe um modelo instruído (ex.: Qwen ou Gemma, 4B a 8B parâmetros, quantização Q4). Para a abordagem `pdf`, o modelo precisa ter **visão**.
+2. Na aba **Developer**, carregue o modelo e clique em **Start Server** (porta 1234).
+3. No `backend/.env`, defina `PROVEDOR_IA=lmstudio` e, opcionalmente, `LMSTUDIO_MODELO` com o identificador do modelo.
+
+Modelos locais não leem PDF diretamente: na abordagem `texto` recebem o texto extraído pelo pdfplumber; na abordagem `pdf`, as páginas são enviadas como imagens.
 
 ### Frontend
 

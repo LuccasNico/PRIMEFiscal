@@ -33,4 +33,8 @@ app.include_router(notas.router)
 
 @app.get("/api/saude", tags=["sistema"])
 def saude():
-    return {"status": "ok", "modelo": configuracoes.modelo_claude}
+    if configuracoes.provedor_ia == "lmstudio":
+        modelo = configuracoes.lmstudio_modelo or "(primeiro disponível)"
+    else:
+        modelo = configuracoes.modelo_claude
+    return {"status": "ok", "provedor": configuracoes.provedor_ia, "modelo": modelo}

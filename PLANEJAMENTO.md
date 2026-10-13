@@ -56,6 +56,8 @@ Número, série, chave de acesso, data de emissão, emitente (razão social, CNP
 
 Decisão: o **Tesseract foi descartado**, porque o Claude lê PDFs escaneados diretamente. Pode voltar como trabalho futuro (modelo local sem visão).
 
+**Provedor local (LM Studio):** além da Claude API, o backend aceita modelos locais via LM Studio (`PROVEDOR_IA=lmstudio`), usando a API compatível com OpenAI e saída restrita ao mesmo JSON Schema. Na abordagem "pdf", as páginas são convertidas em imagens (exige modelo com visão). Isso permite testar sem custo e comparar no TCC um **modelo local** (gratuito, dados não saem da máquina, LGPD) com a **nuvem** (mais preciso, pago).
+
 ### Stack
 
 - **Backend:** Python 3.12+, FastAPI, Pydantic, SDK `anthropic`, pdfplumber, SQLAlchemy (SQLite no desenvolvimento, PostgreSQL opcional)
@@ -87,7 +89,7 @@ Documentação automática em `http://localhost:8000/docs` (Swagger), usada como
 | # | Comparação | Pergunta respondida |
 |---|---|---|
 | E1 | Baseline regex × Claude (texto) × Claude (PDF direto) | A IA supera regras fixas? Ler o PDF direto vale o custo? |
-| E2 | Opus 5.5 × Sonnet 5.5 × Haiku 4.5 | Qual a relação custo × precisão de cada modelo? |
+| E2 | Opus 5.5 × Sonnet 5.5 × Haiku 4.5 × modelo local (LM Studio) | Qual a relação custo × precisão de cada modelo? Um modelo local gratuito é suficiente? |
 | E3 | Desempenho por tipo (NF-e × NFC-e × NFS-e) | Onde a extração é mais difícil? |
 | E4 | PDF nativo × escaneado | Qual o impacto da qualidade do documento? |
 | E5 | Taxa de erros detectados pela validação | As regras fiscais pegam as alucinações? |

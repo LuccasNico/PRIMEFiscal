@@ -3,7 +3,7 @@
 from enum import Enum
 
 from app.schemas.nota_fiscal import Metadados, NotaFiscalExtraida, ResultadoValidacao
-from app.services import extrator_ia, extrator_texto
+from app.services import extrator_texto, ia
 from app.services.validacao import validar_nota
 
 
@@ -18,11 +18,11 @@ def processar_pdf(
     if abordagem == Abordagem.TEXTO:
         texto = extrator_texto.extrair_texto(pdf_bytes)
         if len(texto) < 50:
-            raise extrator_ia.ErroExtracao(
+            raise ia.ErroExtracao(
                 "O PDF não tem texto embutido (provavelmente escaneado). Use a abordagem 'pdf'."
             )
-        dados, metadados = extrator_ia.extrair_de_texto(texto)
+        dados, metadados = ia.extrair_de_texto(texto)
     else:
-        dados, metadados = extrator_ia.extrair_de_pdf(pdf_bytes)
+        dados, metadados = ia.extrair_de_pdf(pdf_bytes)
 
     return dados, validar_nota(dados), metadados

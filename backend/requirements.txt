@@ -4,3 +4,4 @@ pdfplumber
 sqlalchemy>=2.0
 python-dotenv
 pytest
+httpx
