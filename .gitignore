@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Ambiente / segredos
+.env
+
+# Banco local
+*.db
+*.sqlite3
+
+# Dados reais de notas fiscais (LGPD) — nunca versionar
+dados/
+uploads/
+
+# Node
+node_modules/
+dist/
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
