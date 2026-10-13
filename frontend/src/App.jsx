@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { enviarLote, enviarNota, listarNotas } from './api.js'
+import { enviarLote, enviarNota, listarNotas, obterSaude } from './api.js'
 import AreaUpload from './components/AreaUpload.jsx'
 import DetalheNota from './components/DetalheNota.jsx'
 import ListaNotas from './components/ListaNotas.jsx'
@@ -9,6 +9,7 @@ export default function App() {
   const [selecionadaId, setSelecionadaId] = useState(null)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState(null)
+  const [saude, setSaude] = useState(undefined)
 
   const atualizar = useCallback(async () => {
     try {
@@ -20,6 +21,9 @@ export default function App() {
 
   useEffect(() => {
     atualizar()
+    obterSaude()
+      .then(setSaude)
+      .catch(() => setSaude(null))
   }, [atualizar])
 
   // Enquanto houver notas de um lote em processamento, atualiza a lista periodicamente
@@ -40,8 +44,10 @@ export default function App() {
         await enviarLote(arquivos, abordagem)
       }
       await atualizar()
+      return true
     } catch (e) {
       setErro(e.message)
+      return false
     } finally {
       setEnviando(false)
     }
@@ -54,6 +60,12 @@ export default function App() {
       <header className="cabecalho">
         <h1>PRIMEFiscal</h1>
         <p>Extração de dados de notas fiscais com Inteligência Artificial</p>
+        {saude && (
+          <p className="provedor">
+            IA: <strong>{saude.provedor === 'lmstudio' ? 'LM Studio (local)' : 'Claude API'}</strong> · {saude.modelo}
+          </p>
+        )}
+        {saude === null && <p className="provedor alerta-erro">Backend fora do ar (http://localhost:8000)</p>}
       </header>
 
       <main className="conteudo">

@@ -135,6 +135,78 @@ button {
   cursor: pointer;
 }
 
+.provedor {
+  margin: -16px 0 24px;
+  font-size: 0.85rem;
+  color: var(--texto-suave);
+}
+
+.aviso {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: var(--aviso);
+}
+
+.arquivos-selecionados {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+}
+
+.arquivos-selecionados li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  font-size: 0.9rem;
+}
+
+.arquivos-selecionados li + li {
+  border-top: 1px solid var(--borda);
+}
+
+.tamanho {
+  color: var(--texto-suave);
+  font-size: 0.8rem;
+}
+
+.botao-remover {
+  background: transparent;
+  border: none;
+  color: var(--texto-suave);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.botao-remover:hover:not(:disabled) {
+  color: var(--erro);
+}
+
+.acoes {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.acoes button:first-child {
+  flex: 1;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.secundario {
+  background: transparent;
+  color: var(--texto);
+  border-color: var(--borda);
+}
+
 .lista-notas {
   list-style: none;
   margin: 0;

@@ -18,6 +18,10 @@ export async function enviarLote(arquivos, abordagem = 'pdf') {
   return tratarResposta(await fetch(`/api/notas/lote?abordagem=${abordagem}`, { method: 'POST', body: form }))
 }
 
+export async function obterSaude() {
+  return tratarResposta(await fetch('/api/saude'))
+}
+
 export async function listarNotas() {
   return tratarResposta(await fetch('/api/notas'))
 }
