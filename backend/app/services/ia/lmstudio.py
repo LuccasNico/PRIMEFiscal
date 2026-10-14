@@ -16,7 +16,7 @@ import pdfplumber
 from pydantic import ValidationError
 
 from app.config import configuracoes
-from app.schemas.nota_fiscal import Metadados, NotaFiscalExtraida
+from app.schemas.nota_fiscal import LIMITE_INFORMACOES_COMPLEMENTARES, Metadados, NotaFiscalExtraida
 from app.services.ia.base import INSTRUCAO_USUARIO, PROMPT_SISTEMA, ErroExtracao, mensagem_com_texto
 
 RESOLUCAO_IMAGEM_DPI = 150
@@ -38,7 +38,17 @@ def schema_sem_referencias(schema: dict) -> dict:
     return resolver(schema)
 
 
-SCHEMA_NOTA = schema_sem_referencias(NotaFiscalExtraida.model_json_schema())
+def _com_limite_de_texto_livre(schema: dict) -> dict:
+    """Impõe o limite de tamanho no próprio schema: o LM Studio restringe a geração a ele,
+    então o modelo não consegue despejar o documento inteiro em informacoes_complementares."""
+    campo = schema["properties"]["informacoes_complementares"]
+    for opcao in campo.get("anyOf", [campo]):
+        if opcao.get("type") == "string":
+            opcao["maxLength"] = LIMITE_INFORMACOES_COMPLEMENTARES
+    return schema
+
+
+SCHEMA_NOTA = _com_limite_de_texto_livre(schema_sem_referencias(NotaFiscalExtraida.model_json_schema()))
 
 
 def _paginas_como_imagens(pdf_bytes: bytes) -> list[str]:

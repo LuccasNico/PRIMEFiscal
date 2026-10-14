@@ -9,7 +9,7 @@ O mesmo modelo Pydantic é usado em três lugares:
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class TipoDocumento(str, Enum):
@@ -25,6 +25,8 @@ class Participante(BaseModel):
     cpf: str | None = Field(None, description="CPF com 11 dígitos, sem pontuação")
     inscricao_estadual: str | None = None
     inscricao_municipal: str | None = None
+    endereco: str | None = Field(None, description="Logradouro, número e bairro")
+    cep: str | None = Field(None, description="CEP com 8 dígitos, sem pontuação")
     municipio: str | None = None
     uf: str | None = Field(None, description="Sigla do estado, ex.: SP")
 
@@ -55,6 +57,15 @@ class Impostos(BaseModel):
     )
 
 
+class Pagamento(BaseModel):
+    forma: str = Field(description="Forma de pagamento, ex.: Dinheiro, Cartão de Débito, PIX, Boleto")
+    valor: float | None = None
+
+
+# Limite do único campo de texto livre: sem ele, modelos pequenos tendem a copiar o documento inteiro ali
+LIMITE_INFORMACOES_COMPLEMENTARES = 500
+
+
 class NotaFiscalExtraida(BaseModel):
     tipo_documento: TipoDocumento
     chave_acesso: str | None = Field(None, description="Chave de acesso com 44 dígitos, sem espaços")
@@ -69,7 +80,20 @@ class NotaFiscalExtraida(BaseModel):
     valor_desconto: float | None = None
     valor_frete: float | None = None
     valor_total_nota: float | None = None
-    observacoes: str | None = Field(None, description="Informações complementares relevantes")
+    pagamentos: list[Pagamento] = Field(default_factory=list)
+    informacoes_complementares: str | None = Field(
+        None,
+        description=(
+            "Somente o texto do quadro 'Informações Complementares' ou 'Informações Adicionais', "
+            f"resumido em até {LIMITE_INFORMACOES_COMPLEMENTARES} caracteres. Não repita itens, endereços, "
+            "valores ou qualquer dado que já tenha campo próprio."
+        ),
+    )
+
+    @field_validator("informacoes_complementares")
+    @classmethod
+    def _limitar_texto(cls, valor: str | None) -> str | None:
+        return valor[:LIMITE_INFORMACOES_COMPLEMENTARES] if valor else valor
 
 
 class ResultadoValidacao(BaseModel):

@@ -1,4 +1,11 @@
-from app.schemas.nota_fiscal import Impostos, Item, NotaFiscalExtraida, Participante, TipoDocumento
+from app.schemas.nota_fiscal import (
+    LIMITE_INFORMACOES_COMPLEMENTARES,
+    Impostos,
+    Item,
+    NotaFiscalExtraida,
+    Participante,
+    TipoDocumento,
+)
 from app.services.validacao import chave_acesso_valida, cnpj_valido, cpf_valido, validar_nota
 
 # Pesos da chave de acesso da esquerda para a direita, conforme o Manual de Orientação do Contribuinte
@@ -74,6 +81,17 @@ def test_item_com_quantidade_x_valor_errado():
     itens = [Item(descricao="Produto A", quantidade=3, valor_unitario=10.5, valor_total=21.0)]
     resultado = validar_nota(nota_exemplo(itens=itens, valor_total_produtos=21.0))
     assert resultado.verificacoes["itens_qtd_x_valor"] is False
+
+
+def test_nota_com_valor_mas_sem_itens():
+    resultado = validar_nota(nota_exemplo(itens=[]))
+    assert not resultado.valido
+    assert resultado.verificacoes["itens_extraidos"] is False
+
+
+def test_informacoes_complementares_sao_limitadas():
+    nota = nota_exemplo(informacoes_complementares="x" * 5000)
+    assert len(nota.informacoes_complementares) == LIMITE_INFORMACOES_COMPLEMENTARES
 
 
 def test_nfse_sem_chave_de_acesso_e_aceita():

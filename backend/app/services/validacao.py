@@ -107,6 +107,11 @@ def validar_nota(nota: NotaFiscalExtraida) -> ResultadoValidacao:
         verificar("data_emissao", data_valida(nota.data_emissao),
                   f"Data de emissão inválida: {nota.data_emissao}")
 
+    total_declarado = nota.valor_total_produtos or nota.valor_total_nota or 0
+    if total_declarado > 0:
+        verificar("itens_extraidos", bool(nota.itens),
+                  "Nenhum item foi extraído, embora a nota tenha valor total.")
+
     itens_inconsistentes = [
         i + 1 for i, item in enumerate(nota.itens)
         if None not in (item.quantidade, item.valor_unitario, item.valor_total)

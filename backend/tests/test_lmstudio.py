@@ -73,6 +73,12 @@ def test_schema_sem_referencias():
     assert "razao_social" in json.dumps(lmstudio.SCHEMA_NOTA["properties"]["emitente"])
 
 
+def test_schema_limita_texto_livre():
+    campo = lmstudio.SCHEMA_NOTA["properties"]["informacoes_complementares"]
+    opcao_texto = next(o for o in campo["anyOf"] if o.get("type") == "string")
+    assert opcao_texto["maxLength"] == 500
+
+
 def test_extrair_de_texto(requisicoes):
     enviadas = requisicoes(resposta_lmstudio(json.dumps(NOTA_JSON)))
     dados, metadados = lmstudio.extrair_de_texto("texto da nota")
