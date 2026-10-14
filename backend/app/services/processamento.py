@@ -16,12 +16,11 @@ def processar_pdf(
     pdf_bytes: bytes, abordagem: Abordagem = Abordagem.PDF
 ) -> tuple[NotaFiscalExtraida, ResultadoValidacao, Metadados]:
     if abordagem == Abordagem.TEXTO:
-        texto = extrator_texto.extrair_texto(pdf_bytes)
-        if len(texto) < 50:
+        if not extrator_texto.tem_camada_de_texto(pdf_bytes):
             raise ia.ErroExtracao(
                 "O PDF não tem texto embutido (provavelmente escaneado). Use a abordagem 'pdf'."
             )
-        dados, metadados = ia.extrair_de_texto(texto)
+        dados, metadados = ia.extrair_de_texto(extrator_texto.extrair_texto_estruturado(pdf_bytes))
     else:
         dados, metadados = ia.extrair_de_pdf(pdf_bytes)
 

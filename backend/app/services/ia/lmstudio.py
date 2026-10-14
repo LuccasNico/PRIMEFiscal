@@ -110,7 +110,10 @@ def _extrair(conteudo: str | list[dict], abordagem: str) -> tuple[NotaFiscalExtr
     corpo = resposta.json()
     escolha = corpo["choices"][0]
     if escolha.get("finish_reason") == "length":
-        raise ErroExtracao("A resposta do modelo local foi cortada por limite de tokens.")
+        raise ErroExtracao(
+            "A resposta do modelo local foi cortada por limite de tokens. "
+            "Aumente o Context Length do modelo no LM Studio (recomendado: 8192 ou mais)."
+        )
 
     try:
         dados = NotaFiscalExtraida.model_validate_json(escolha["message"]["content"])

@@ -5,29 +5,7 @@ import pytest
 
 from app.services.ia import lmstudio
 from app.services.ia.base import ErroExtracao
-
-
-def gerar_pdf(texto: str) -> bytes:
-    """PDF mínimo de uma página com uma linha de texto, para os testes."""
-    stream = f"BT /F1 12 Tf 72 720 Td ({texto}) Tj ET".encode()
-    objetos = [
-        b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R "
-        b"/Resources << /Font << /F1 5 0 R >> >> >>",
-        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    ]
-    pdf = b"%PDF-1.4\n"
-    posicoes = []
-    for i, objeto in enumerate(objetos, start=1):
-        posicoes.append(len(pdf))
-        pdf += f"{i} 0 obj\n".encode() + objeto + b"\nendobj\n"
-    inicio_xref = len(pdf)
-    pdf += f"xref\n0 {len(objetos) + 1}\n0000000000 65535 f \n".encode()
-    pdf += b"".join(f"{p:010d} 00000 n \n".encode() for p in posicoes)
-    pdf += f"trailer\n<< /Size {len(objetos) + 1} /Root 1 0 R >>\nstartxref\n{inicio_xref}\n%%EOF".encode()
-    return pdf
+from tests.pdf_teste import pdf_com_texto
 
 
 NOTA_JSON = {
@@ -92,7 +70,7 @@ def test_extrair_de_texto(requisicoes):
 
 def test_extrair_de_pdf_envia_paginas_como_imagem(requisicoes):
     enviadas = requisicoes(resposta_lmstudio(json.dumps(NOTA_JSON)))
-    lmstudio.extrair_de_pdf(gerar_pdf("DANFE teste"))
+    lmstudio.extrair_de_pdf(pdf_com_texto("DANFE teste"))
 
     partes = enviadas[0]["messages"][1]["content"]
     imagens = [p for p in partes if p["type"] == "image_url"]

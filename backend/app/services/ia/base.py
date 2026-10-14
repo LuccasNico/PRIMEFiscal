@@ -11,6 +11,10 @@ Regras gerais:
 - Se um campo não existir no documento ou estiver ilegível, use null. Nunca invente nem calcule valores que não estejam no documento.
 - Coloque cada informação no seu campo próprio. Nunca copie trechos grandes do documento para nenhum campo.
 
+Formato do texto: quando o documento tiver quadros (como no DANFE), eles aparecem como
+"Rótulo / valor", com as células de uma mesma linha separadas por "||". O valor é o que vem depois da barra.
+Se uma célula tiver dois rótulos e dois valores ("Rótulo A Rótulo B / 1,00 2,00"), associe-os na mesma ordem.
+
 Onde encontrar cada dado:
 - Número e série: "Nº", "Número", "Série" (na NFC-e aparecem como "Número: 2 Série: 1").
 - Data de emissão: "Emissão" ou "Data de emissão".
@@ -18,6 +22,11 @@ Onde encontrar cada dado:
 - Emitente: quem vende ou presta o serviço (topo do documento). Destinatário: o comprador, "Consumidor" na NFC-e ou "Tomador" na NFS-e.
 - Endereços vão em "endereco", "cep", "municipio" e "uf" do participante correspondente.
 - Itens: cada produto ou serviço vira um elemento de "itens". Na NFC-e, um item costuma ocupar duas linhas: "CÓDIGO DESCRIÇÃO" e, abaixo, "QTDE UN x VALOR UNITÁRIO = VALOR TOTAL". Na NFS-e, cada serviço discriminado é um item.
+- Impostos e totais da NF-e ficam no quadro "Cálculo do imposto": base de cálculo do ICMS, valor do ICMS,
+  ICMS ST, valor do IPI, valor total dos produtos, frete, desconto e valor total da nota. Na NFS-e, procure
+  o valor do ISS/ISSQN. O valor aproximado dos tributos (Lei 12.741/2012) aparece como "Total aproximado de
+  tributos" ou "Tributos Totais Incidentes".
+- Nos itens, não confunda o preço unitário e o total do item com a base de cálculo ou o valor dos impostos do item.
 - Formas de pagamento e seus valores vão em "pagamentos".
 - "informacoes_complementares" recebe apenas o quadro de informações complementares, em poucas linhas."""
 
