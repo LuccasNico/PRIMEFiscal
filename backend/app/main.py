@@ -6,18 +6,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import configuracoes
 from app.db import criar_tabelas
 from app.routers import notas
+from app.services.fila import fila
 
 
 @asynccontextmanager
 async def ciclo_de_vida(app: FastAPI):
     criar_tabelas()
+    fila.iniciar()
     yield
+    fila.parar()
 
 
 app = FastAPI(
     title="PRIMEFiscal API",
     description="Extração e estruturação automatizada de dados de notas fiscais (NF-e, NFC-e, NFS-e) com IA.",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=ciclo_de_vida,
 )
 
@@ -31,10 +34,16 @@ app.add_middleware(
 app.include_router(notas.router)
 
 
-@app.get("/api/saude", tags=["sistema"])
+@app.get("/api/saude", tags=["sistema"], summary="Informa se a API está no ar e qual IA está configurada")
 def saude():
     if configuracoes.provedor_ia == "lmstudio":
         modelo = configuracoes.lmstudio_modelo or "(primeiro disponível)"
     else:
         modelo = configuracoes.modelo_claude
-    return {"status": "ok", "provedor": configuracoes.provedor_ia, "modelo": modelo}
+    return {
+        "status": "ok",
+        "provedor": configuracoes.provedor_ia,
+        "modelo": modelo,
+        "tamanho_maximo_mb": configuracoes.tamanho_maximo_bytes // (1024 * 1024),
+        "maximo_de_arquivos_por_envio": notas.MAXIMO_DE_ARQUIVOS_POR_ENVIO,
+    }

@@ -53,24 +53,29 @@ SCHEMA_NOTA = _com_limite_de_texto_livre(schema_sem_referencias(NotaFiscalExtrai
 
 def _paginas_como_imagens(pdf_bytes: bytes) -> list[str]:
     imagens = []
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        for pagina in pdf.pages:
-            buffer = io.BytesIO()
-            pagina.to_image(resolution=RESOLUCAO_IMAGEM_DPI).original.save(buffer, format="PNG")
-            imagens.append(base64.standard_b64encode(buffer.getvalue()).decode("ascii"))
+    try:
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for pagina in pdf.pages:
+                buffer = io.BytesIO()
+                pagina.to_image(resolution=RESOLUCAO_IMAGEM_DPI).original.save(buffer, format="PNG")
+                imagens.append(base64.standard_b64encode(buffer.getvalue()).decode("ascii"))
+    except Exception as e:
+        # O pdfplumber/pdfminer lança exceções de vários tipos para arquivos corrompidos ou com senha
+        raise ErroExtracao("Não foi possível ler o PDF (arquivo corrompido ou protegido por senha).") from e
     return imagens
 
 
 def _modelo() -> str:
-    """Usa o modelo do .env ou, se vazio, o primeiro modelo disponível no LM Studio."""
+    """Usa o modelo do .env ou, se vazio, o primeiro modelo de linguagem disponível no LM Studio."""
     if configuracoes.lmstudio_modelo:
         return configuracoes.lmstudio_modelo
     resposta = httpx.get(f"{configuracoes.lmstudio_url}/models", timeout=10)
     resposta.raise_for_status()
-    modelos = resposta.json().get("data", [])
+    # A lista também traz modelos de embedding, que não geram texto
+    modelos = [m["id"] for m in resposta.json().get("data", []) if "embed" not in m["id"].lower()]
     if not modelos:
         raise ErroExtracao("Nenhum modelo disponível no LM Studio. Baixe e carregue um modelo.")
-    return modelos[0]["id"]
+    return modelos[0]
 
 
 def _extrair(conteudo: str | list[dict], abordagem: str) -> tuple[NotaFiscalExtraida, Metadados]:
@@ -100,6 +105,8 @@ def _extrair(conteudo: str | list[dict], abordagem: str) -> tuple[NotaFiscalExtr
         )
     except httpx.TimeoutException:
         raise ErroExtracao("O modelo local demorou demais para responder. Tente um modelo menor ou a abordagem 'texto'.")
+    except httpx.HTTPError as e:
+        raise ErroExtracao(f"Falha na comunicação com o LM Studio: {e}")
 
     if resposta.status_code != 200:
         detalhe = resposta.text[:300]
@@ -107,8 +114,13 @@ def _extrair(conteudo: str | list[dict], abordagem: str) -> tuple[NotaFiscalExtr
             detalhe += " (a abordagem 'pdf' exige um modelo com visão; tente a abordagem 'texto')"
         raise ErroExtracao(f"Erro do LM Studio ({resposta.status_code}): {detalhe}")
 
-    corpo = resposta.json()
-    escolha = corpo["choices"][0]
+    try:
+        corpo = resposta.json()
+        escolha = corpo["choices"][0]
+        texto_resposta = escolha["message"]["content"]
+    except (ValueError, KeyError, IndexError, TypeError):
+        raise ErroExtracao("O LM Studio devolveu uma resposta em formato inesperado.")
+
     if escolha.get("finish_reason") == "length":
         raise ErroExtracao(
             "A resposta do modelo local foi cortada por limite de tokens. "
@@ -116,7 +128,7 @@ def _extrair(conteudo: str | list[dict], abordagem: str) -> tuple[NotaFiscalExtr
         )
 
     try:
-        dados = NotaFiscalExtraida.model_validate_json(escolha["message"]["content"])
+        dados = NotaFiscalExtraida.model_validate_json(texto_resposta or "")
     except ValidationError as e:
         raise ErroExtracao(f"O modelo local devolveu um JSON fora do formato esperado: {e.error_count()} erro(s).")
 

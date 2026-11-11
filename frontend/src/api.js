@@ -1,27 +1,39 @@
-async function tratarResposta(resposta) {
-  if (!resposta.ok) {
-    const corpo = await resposta.json().catch(() => ({}))
-    throw new Error(corpo.detail || `Erro ${resposta.status}`)
+async function mensagemDeErro(resposta) {
+  const corpo = await resposta.json().catch(() => null)
+  const detalhe = corpo?.detail
+  if (typeof detalhe === 'string') return detalhe
+  // Erros de validação do FastAPI chegam como lista
+  if (Array.isArray(detalhe)) return detalhe.map((item) => item.msg).join('; ')
+  if (resposta.status >= 500) return 'O servidor não respondeu. Verifique se o backend está rodando.'
+  return `Erro ${resposta.status}`
+}
+
+async function requisitar(url, opcoes) {
+  let resposta
+  try {
+    resposta = await fetch(url, opcoes)
+  } catch {
+    throw new Error('Não foi possível falar com o servidor. Verifique se o backend está rodando.')
   }
-  return resposta.json()
+  if (!resposta.ok) throw new Error(await mensagemDeErro(resposta))
+  return resposta.status === 204 ? null : resposta.json()
 }
 
-export async function enviarNota(arquivo, abordagem = 'pdf') {
-  const form = new FormData()
-  form.append('arquivo', arquivo)
-  return tratarResposta(await fetch(`/api/notas?abordagem=${abordagem}`, { method: 'POST', body: form }))
-}
+export const obterSaude = () => requisitar('/api/saude')
 
-export async function enviarLote(arquivos, abordagem = 'pdf') {
+export const listarNotas = () => requisitar('/api/notas')
+
+export function enviarNotas(arquivos, abordagem) {
   const form = new FormData()
   arquivos.forEach((arquivo) => form.append('arquivos', arquivo))
-  return tratarResposta(await fetch(`/api/notas/lote?abordagem=${abordagem}`, { method: 'POST', body: form }))
+  return requisitar(`/api/notas?abordagem=${abordagem}`, { method: 'POST', body: form })
 }
 
-export async function obterSaude() {
-  return tratarResposta(await fetch('/api/saude'))
-}
+export const removerNota = (id) => requisitar(`/api/notas/${id}`, { method: 'DELETE' })
 
-export async function listarNotas() {
-  return tratarResposta(await fetch('/api/notas'))
-}
+export const esvaziarFila = () => requisitar('/api/notas?status=pendente', { method: 'DELETE' })
+
+export const reprocessarNota = (id, abordagem) =>
+  requisitar(`/api/notas/${id}/reprocessar${abordagem ? `?abordagem=${abordagem}` : ''}`, { method: 'POST' })
+
+export const urlDoPdf = (id) => `/api/notas/${id}/pdf`

@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -99,3 +100,34 @@ def test_lmstudio_desligado(monkeypatch):
     monkeypatch.setattr(lmstudio.httpx, "post", post_falso)
     with pytest.raises(ErroExtracao, match="Não foi possível conectar"):
         lmstudio.extrair_de_texto("texto")
+
+
+def test_resposta_em_formato_inesperado(requisicoes):
+    requisicoes(httpx.Response(200, json={"error": "modelo descarregado"}))
+    with pytest.raises(ErroExtracao, match="formato inesperado"):
+        lmstudio.extrair_de_texto("texto")
+
+
+def test_erro_http_do_lmstudio(requisicoes):
+    requisicoes(httpx.Response(400, text="model does not support images"))
+    with pytest.raises(ErroExtracao, match=r"Erro do LM Studio \(400\)"):
+        lmstudio.extrair_de_texto("texto")
+
+
+def test_pdf_corrompido_na_abordagem_pdf():
+    with pytest.raises(ErroExtracao, match="Não foi possível ler o PDF"):
+        lmstudio.extrair_de_pdf(b"%PDF-1.4 isto nao e um pdf de verdade")
+
+
+def test_modelo_padrao_ignora_modelos_de_embedding(monkeypatch):
+    monkeypatch.setattr(lmstudio, "configuracoes", SimpleNamespace(lmstudio_modelo="", lmstudio_url="http://lm"))
+    modelos = {"data": [{"id": "text-embedding-nomic-embed-text-v1.5"}, {"id": "qwen3-4b"}]}
+    monkeypatch.setattr(
+        lmstudio.httpx, "get", lambda url, timeout: httpx.Response(200, json=modelos, request=httpx.Request("GET", url))
+    )
+    assert lmstudio._modelo() == "qwen3-4b"
+
+
+def test_modelo_definido_no_env_tem_prioridade(monkeypatch):
+    monkeypatch.setattr(lmstudio, "configuracoes", SimpleNamespace(lmstudio_modelo="gemma-3-4b", lmstudio_url="http://lm"))
+    assert lmstudio._modelo() == "gemma-3-4b"

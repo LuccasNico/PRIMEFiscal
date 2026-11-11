@@ -1,119 +1,140 @@
 import { useRef, useState } from 'react'
+import { ROTULOS_ABORDAGEM, tamanhoDoArquivo } from '../formatos.js'
+import { IconeEnviar, IconeFechar } from './Icones.jsx'
 
-const formatarTamanho = (bytes) =>
-  bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
+const ehPdf = (arquivo) => arquivo.type === 'application/pdf' || arquivo.name.toLowerCase().endsWith('.pdf')
+const chave = (arquivo) => `${arquivo.name}-${arquivo.size}`
 
-export default function AreaUpload({ aoEnviar, enviando }) {
+/** Escolha dos arquivos: eles ficam em uma lista de conferência e só vão para a fila quando a pessoa confirma. */
+export default function AreaUpload({ aoEnviar, tamanhoMaximoMb, modeloLocal }) {
   const [arquivos, setArquivos] = useState([])
   const [abordagem, setAbordagem] = useState('texto')
   const [arrastando, setArrastando] = useState(false)
-  const [aviso, setAviso] = useState(null)
+  const [enviando, setEnviando] = useState(false)
+  const [avisos, setAvisos] = useState([])
   const inputRef = useRef(null)
 
   function adicionar(lista) {
     const novos = Array.from(lista)
-    const pdfs = novos.filter((a) => a.type === 'application/pdf' || a.name.toLowerCase().endsWith('.pdf'))
-    const recusados = novos.length - pdfs.length
-    setAviso(recusados ? `${recusados} arquivo(s) ignorado(s): apenas PDF é aceito.` : null)
+    const pdfs = novos.filter(ehPdf)
+    const limite = tamanhoMaximoMb ? tamanhoMaximoMb * 1024 * 1024 : Infinity
+    const aceitos = pdfs.filter((arquivo) => arquivo.size <= limite)
+
+    const novosAvisos = []
+    if (novos.length > pdfs.length) {
+      novosAvisos.push(`${novos.length - pdfs.length} arquivo(s) ignorado(s): apenas PDF é aceito.`)
+    }
+    if (pdfs.length > aceitos.length) {
+      novosAvisos.push(`${pdfs.length - aceitos.length} arquivo(s) ignorado(s): acima de ${tamanhoMaximoMb} MB.`)
+    }
+    setAvisos(novosAvisos)
 
     // Evita adicionar o mesmo arquivo duas vezes
     setArquivos((atuais) => {
-      const chaves = new Set(atuais.map((a) => `${a.name}-${a.size}`))
-      return [...atuais, ...pdfs.filter((a) => !chaves.has(`${a.name}-${a.size}`))]
+      const existentes = new Set(atuais.map(chave))
+      return [...atuais, ...aceitos.filter((arquivo) => !existentes.has(chave(arquivo)))]
     })
   }
 
-  function remover(indice) {
-    setArquivos((atuais) => atuais.filter((_, i) => i !== indice))
-  }
-
   async function enviar() {
-    // Em caso de erro, mantém os arquivos para o usuário tentar de novo
-    if (await aoEnviar(arquivos, abordagem)) {
-      setArquivos([])
-      setAviso(null)
-    }
+    setEnviando(true)
+    const enviados = await aoEnviar(arquivos, abordagem)
+    // Em caso de erro, os arquivos que não foram aceitos continuam na lista para nova tentativa
+    setArquivos((atuais) => atuais.slice(enviados))
+    setAvisos([])
+    setEnviando(false)
   }
 
   return (
-    <div className="cartao">
-      <h2>Enviar nota fiscal</h2>
+    <section className="cartao" aria-labelledby="titulo-envio">
+      <h2 id="titulo-envio">Enviar notas fiscais</h2>
 
-      <div
+      <button
+        type="button"
         className={`area-upload ${arrastando ? 'arrastando' : ''}`}
-        onClick={() => !enviando && inputRef.current?.click()}
-        onDragOver={(e) => {
-          e.preventDefault()
+        disabled={enviando}
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(evento) => {
+          evento.preventDefault()
           setArrastando(true)
         }}
         onDragLeave={() => setArrastando(false)}
-        onDrop={(e) => {
-          e.preventDefault()
+        onDrop={(evento) => {
+          evento.preventDefault()
           setArrastando(false)
-          if (!enviando) adicionar(e.dataTransfer.files)
+          if (!enviando) adicionar(evento.dataTransfer.files)
         }}
       >
-        <p><strong>Arraste os PDFs aqui</strong></p>
-        <p className="dica">ou clique para escolher os arquivos</p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="application/pdf,.pdf"
-          multiple
-          hidden
-          onChange={(e) => {
-            adicionar(e.target.files)
-            e.target.value = ''
-          }}
-        />
-      </div>
+        <strong>Arraste os PDFs aqui</strong>
+        <span className="dica">ou clique para escolher os arquivos</span>
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        multiple
+        hidden
+        onChange={(evento) => {
+          adicionar(evento.target.files)
+          evento.target.value = ''
+        }}
+      />
 
-      {aviso && <p className="aviso">{aviso}</p>}
+      {avisos.map((aviso) => (
+        <p key={aviso} className="aviso">
+          {aviso}
+        </p>
+      ))}
 
       {arquivos.length > 0 && (
-        <ul className="arquivos-selecionados">
-          {arquivos.map((arquivo, i) => (
-            <li key={`${arquivo.name}-${arquivo.size}`}>
-              <span className="nome-arquivo" title={arquivo.name}>{arquivo.name}</span>
-              <span className="tamanho">{formatarTamanho(arquivo.size)}</span>
-              <button
-                type="button"
-                className="botao-remover"
-                onClick={() => remover(i)}
-                disabled={enviando}
-                aria-label={`Remover ${arquivo.name}`}
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
+        <>
+          <div className="cabecalho-lista">
+            <h3>Selecionados ({arquivos.length})</h3>
+            <button type="button" className="link" onClick={() => setArquivos([])} disabled={enviando}>
+              Limpar
+            </button>
+          </div>
+          <ul className="lista lista-rolavel">
+            {arquivos.map((arquivo) => (
+              <li key={chave(arquivo)} className="linha">
+                <span className="nome-arquivo" title={arquivo.name}>
+                  {arquivo.name}
+                </span>
+                <span className="secundario">{tamanhoDoArquivo(arquivo.size)}</span>
+                <button
+                  type="button"
+                  className="botao-icone"
+                  onClick={() => setArquivos((atuais) => atuais.filter((a) => a !== arquivo))}
+                  disabled={enviando}
+                  aria-label={`Remover ${arquivo.name} da seleção`}
+                  title="Remover da seleção"
+                >
+                  <IconeFechar />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
-      <label className="seletor">
+      <label className="campo">
         Abordagem de extração
-        <select value={abordagem} onChange={(e) => setAbordagem(e.target.value)} disabled={enviando}>
-          <option value="texto">Texto extraído do PDF (mais rápido)</option>
-          <option value="pdf">PDF/imagem da página (exige modelo com visão)</option>
+        <select value={abordagem} onChange={(evento) => setAbordagem(evento.target.value)} disabled={enviando}>
+          <option value="texto">{ROTULOS_ABORDAGEM.texto} (mais rápido)</option>
+          <option value="pdf">
+            {ROTULOS_ABORDAGEM.pdf} ({modeloLocal ? 'exige modelo com visão' : 'lê também notas escaneadas'})
+          </option>
         </select>
       </label>
 
-      <div className="acoes">
-        <button type="button" onClick={enviar} disabled={!arquivos.length || enviando}>
-          {enviando
-            ? 'Processando...'
-            : arquivos.length > 1
-              ? `Enviar ${arquivos.length} arquivos (lote)`
-              : 'Enviar'}
-        </button>
-        {arquivos.length > 0 && !enviando && (
-          <button type="button" className="secundario" onClick={() => setArquivos([])}>
-            Limpar
-          </button>
-        )}
-      </div>
-
-      {enviando && <p className="dica">A extração pode levar alguns minutos com modelo local.</p>}
-    </div>
+      <button type="button" className="primario largo" onClick={enviar} disabled={!arquivos.length || enviando}>
+        <IconeEnviar />
+        {enviando
+          ? 'Enviando...'
+          : arquivos.length > 1
+            ? `Adicionar ${arquivos.length} notas à fila`
+            : 'Adicionar à fila'}
+      </button>
+    </section>
   )
 }

@@ -13,11 +13,6 @@ def extrair_texto(pdf_bytes: bytes) -> str:
     return "\n\n".join(paginas).strip()
 
 
-def tem_camada_de_texto(pdf_bytes: bytes, minimo_caracteres: int = 50) -> bool:
-    """PDFs escaneados não têm texto embutido; nesse caso só a abordagem "pdf" funciona."""
-    return len(extrair_texto(pdf_bytes)) >= minimo_caracteres
-
-
 def compactar(texto: str) -> str:
     """Remove linhas vazias e reduz sequências de espaços (o modo layout do pdfplumber alinha
     colunas com muitos espaços, que só gastam tokens e podem estourar o contexto de modelos locais)."""
@@ -51,16 +46,17 @@ def extrair_texto_estruturado(pdf_bytes: bytes) -> str:
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         for pagina in pdf.pages:
             tabelas = pagina.find_tables()
-            if not tabelas:
-                partes.append(pagina.extract_text(layout=True) or "")
-                continue
-
             linhas_quadros = []
             for tabela in tabelas:
                 for linha in tabela.extract():
                     celulas = [_celula(c) for c in linha if _celula(c)]
                     if celulas:
                         linhas_quadros.append(" || ".join(celulas))
+
+            # Sem quadros com texto (NFC-e, ou página só com bordas desenhadas), vale o texto corrido
+            if not linhas_quadros:
+                partes.append(pagina.extract_text(layout=True) or "")
+                continue
 
             restante = pagina.filter(_fora_das_caixas([t.bbox for t in tabelas])).extract_text(layout=True) or ""
             partes.append(

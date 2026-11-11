@@ -10,10 +10,21 @@ import time
 from functools import lru_cache
 
 import anthropic
+from pydantic import ValidationError
 
 from app.config import configuracoes
 from app.schemas.nota_fiscal import Metadados, NotaFiscalExtraida
 from app.services.ia.base import INSTRUCAO_USUARIO, PROMPT_SISTEMA, ErroExtracao, mensagem_com_texto
+
+# Modelos em que a API reexecuta a requisição em um modelo alternativo quando há recusa por
+# política de segurança. Nos demais (ex.: Haiku), o parâmetro `fallbacks` não tem efeito ou é rejeitado.
+MODELOS_COM_FALLBACK = {
+    "claude-fable-5-2",
+    "claude-fable-5-1",
+    "claude-opus-5-5",
+    "claude-opus-5",
+    "claude-sonnet-5-5",
+}
 
 
 @lru_cache
@@ -22,18 +33,52 @@ def _cliente() -> anthropic.Anthropic:
     return anthropic.Anthropic()
 
 
-def _extrair(conteudo: list[dict], abordagem: str) -> tuple[NotaFiscalExtraida, Metadados]:
-    inicio = time.perf_counter()
-    resposta = _cliente().beta.messages.parse(
+def _chamar_api(conteudo: list[dict]):
+    """Faz a requisição e converte as falhas do SDK em mensagens que o usuário consegue resolver."""
+    parametros = dict(
         model=configuracoes.modelo_claude,
         max_tokens=16000,
-        # Se o modelo recusar por política de segurança, a API reexecuta em um modelo alternativo
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
         system=PROMPT_SISTEMA,
         messages=[{"role": "user", "content": conteudo}],
         output_format=NotaFiscalExtraida,
     )
+    if configuracoes.modelo_claude in MODELOS_COM_FALLBACK:
+        parametros.update(betas=["server-side-fallback-2026-07-01"], fallbacks="default")
+
+    try:
+        return _cliente().beta.messages.parse(**parametros)
+    except anthropic.AuthenticationError as e:
+        raise ErroExtracao("Chave da Claude API inválida. Confira ANTHROPIC_API_KEY em backend/.env.") from e
+    except anthropic.PermissionDeniedError as e:
+        raise ErroExtracao(
+            f"A chave da Claude API não tem permissão para usar o modelo '{configuracoes.modelo_claude}'."
+        ) from e
+    except anthropic.NotFoundError as e:
+        raise ErroExtracao(
+            f"Modelo '{configuracoes.modelo_claude}' não encontrado. Confira MODELO_CLAUDE em backend/.env."
+        ) from e
+    except anthropic.RateLimitError as e:
+        raise ErroExtracao("Limite de requisições da Claude API atingido. Tente novamente em instantes.") from e
+    except anthropic.APIStatusError as e:
+        raise ErroExtracao(f"Erro na Claude API ({e.status_code}): {e.message}") from e
+    except anthropic.APIConnectionError as e:
+        raise ErroExtracao("Falha de conexão com a Claude API. Verifique a internet.") from e
+    except anthropic.AnthropicError as e:
+        raise ErroExtracao(f"Erro no cliente da Claude API: {e}") from e
+    except ValidationError as e:
+        raise ErroExtracao(f"O modelo devolveu dados fora do formato esperado: {e.error_count()} erro(s).") from e
+    except TypeError as e:
+        # Sem nenhuma credencial configurada, o SDK lança TypeError antes de enviar a requisição
+        if "authentication" in str(e):
+            raise ErroExtracao(
+                "Credenciais da Claude API não encontradas. Defina ANTHROPIC_API_KEY em backend/.env."
+            ) from e
+        raise
+
+
+def _extrair(conteudo: list[dict], abordagem: str) -> tuple[NotaFiscalExtraida, Metadados]:
+    inicio = time.perf_counter()
+    resposta = _chamar_api(conteudo)
     tempo_ms = int((time.perf_counter() - inicio) * 1000)
 
     if resposta.stop_reason == "refusal":

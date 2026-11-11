@@ -1,87 +1,107 @@
-import { useCallback, useEffect, useState } from 'react'
-import { enviarLote, enviarNota, listarNotas, obterSaude } from './api.js'
+import { useState } from 'react'
 import AreaUpload from './components/AreaUpload.jsx'
 import DetalheNota from './components/DetalheNota.jsx'
+import FilaProcessamento from './components/FilaProcessamento.jsx'
+import { IconeFechar } from './components/Icones.jsx'
 import ListaNotas from './components/ListaNotas.jsx'
+import { useNotas } from './useNotas.js'
+
+function Cabecalho({ saude }) {
+  return (
+    <header className="cabecalho">
+      <div>
+        <h1>PRIMEFiscal</h1>
+        <p>Extração de dados de notas fiscais com Inteligência Artificial</p>
+      </div>
+      {saude && (
+        <p className="provedor">
+          IA: <strong>{saude.provedor === 'lmstudio' ? 'LM Studio (local)' : 'Claude API'}</strong>
+          <br />
+          {saude.modelo}
+        </p>
+      )}
+      {saude === null && (
+        <p className="provedor erro" role="alert">
+          Backend fora do ar
+          <br />
+          http://localhost:8000
+        </p>
+      )}
+    </header>
+  )
+}
 
 export default function App() {
-  const [notas, setNotas] = useState([])
+  const { notas, fila, concluidas, saude, erro, dispensarErro, enviar, remover, esvaziarFila, reprocessar, reprocessarVarias } =
+    useNotas()
   const [selecionadaId, setSelecionadaId] = useState(null)
-  const [enviando, setEnviando] = useState(false)
-  const [erro, setErro] = useState(null)
-  const [saude, setSaude] = useState(undefined)
 
-  const atualizar = useCallback(async () => {
-    try {
-      setNotas(await listarNotas())
-    } catch (e) {
-      setErro(e.message)
-    }
-  }, [])
-
-  useEffect(() => {
-    atualizar()
-    obterSaude()
-      .then(setSaude)
-      .catch(() => setSaude(null))
-  }, [atualizar])
-
-  // Enquanto houver notas de um lote em processamento, atualiza a lista periodicamente
-  useEffect(() => {
-    if (!notas.some((n) => n.status === 'pendente')) return
-    const intervalo = setInterval(atualizar, 3000)
-    return () => clearInterval(intervalo)
-  }, [notas, atualizar])
+  const selecionada = notas.find((nota) => nota.id === selecionadaId)
+  const aguardando = fila.filter((nota) => nota.status === 'pendente')
 
   async function aoEnviar(arquivos, abordagem) {
-    setEnviando(true)
-    setErro(null)
-    try {
-      if (arquivos.length === 1) {
-        const nota = await enviarNota(arquivos[0], abordagem)
-        setSelecionadaId(nota.id)
-      } else {
-        await enviarLote(arquivos, abordagem)
-      }
-      await atualizar()
-      return true
-    } catch (e) {
-      setErro(e.message)
-      return false
-    } finally {
-      setEnviando(false)
-    }
+    const { criadas, enviados } = await enviar(arquivos, abordagem)
+    // Abre a nota recém-enviada quando é uma só ou quando não há outra em exibição
+    if (criadas.length && (criadas.length === 1 || !selecionada)) setSelecionadaId(criadas[0].id)
+    return enviados
   }
-
-  const selecionada = notas.find((n) => n.id === selecionadaId)
 
   return (
     <div className="app">
-      <header className="cabecalho">
-        <h1>PRIMEFiscal</h1>
-        <p>Extração de dados de notas fiscais com Inteligência Artificial</p>
-        {saude && (
-          <p className="provedor">
-            IA: <strong>{saude.provedor === 'lmstudio' ? 'LM Studio (local)' : 'Claude API'}</strong> · {saude.modelo}
-          </p>
-        )}
-        {saude === null && <p className="provedor alerta-erro">Backend fora do ar (http://localhost:8000)</p>}
-      </header>
+      <Cabecalho saude={saude} />
 
       <main className="conteudo">
-        <section className="coluna-esquerda">
-          <AreaUpload aoEnviar={aoEnviar} enviando={enviando} />
-          {erro && <p className="alerta-erro">{erro}</p>}
-          <ListaNotas notas={notas} selecionadaId={selecionadaId} aoSelecionar={setSelecionadaId} />
-        </section>
+        <div className="coluna-esquerda">
+          <AreaUpload
+            aoEnviar={aoEnviar}
+            tamanhoMaximoMb={saude?.tamanho_maximo_mb}
+            modeloLocal={saude?.provedor === 'lmstudio'}
+          />
 
-        <section className="coluna-direita">
-          {selecionada ? (
-            <DetalheNota nota={selecionada} />
-          ) : (
-            <p className="vazio">Envie uma nota fiscal ou selecione uma da lista.</p>
+          {erro && (
+            <div className="alerta" role="alert">
+              <span>{erro}</span>
+              <button type="button" className="botao-icone" onClick={dispensarErro} aria-label="Fechar aviso">
+                <IconeFechar />
+              </button>
+            </div>
           )}
-        </section>
+
+          <FilaProcessamento
+            fila={fila}
+            selecionadaId={selecionadaId}
+            aoSelecionar={setSelecionadaId}
+            aoRemover={remover}
+            aoEsvaziar={esvaziarFila}
+          />
+
+          <ListaNotas
+            notas={concluidas}
+            selecionadaId={selecionadaId}
+            aoSelecionar={setSelecionadaId}
+            aoRemover={remover}
+            aoReprocessar={reprocessar}
+            aoReprocessarVarias={reprocessarVarias}
+          />
+        </div>
+
+        <div className="coluna-direita">
+          {selecionada ? (
+            <DetalheNota
+              key={selecionada.id}
+              nota={selecionada}
+              posicaoNaFila={aguardando.indexOf(selecionada) + 1}
+              aoReprocessar={reprocessar}
+              aoRemover={remover}
+            />
+          ) : (
+            <p className="vazio">
+              {notas.length
+                ? 'Selecione uma nota para ver os dados extraídos.'
+                : 'Envie uma nota fiscal em PDF para começar.'}
+            </p>
+          )}
+        </div>
       </main>
     </div>
   )

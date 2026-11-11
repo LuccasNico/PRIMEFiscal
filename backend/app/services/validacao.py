@@ -48,7 +48,10 @@ def cpf_valido(cpf: str) -> bool:
 
 
 def chave_acesso_valida(chave: str) -> bool:
-    """Chave de 44 dígitos da NF-e/NFC-e; o último é o DV (módulo 11, pesos 2 a 9)."""
+    """Chave de 44 dígitos da NF-e/NFC-e; o último é o DV (módulo 11, pesos 2 a 9).
+
+    Chaves com CNPJ alfanumérico (letras nas posições do CNPJ) ainda não são aceitas.
+    """
     chave = _so_digitos(chave)
     if len(chave) != 44:
         return False
@@ -98,8 +101,11 @@ def validar_nota(nota: NotaFiscalExtraida) -> ResultadoValidacao:
         verificar("cpf_destinatario", cpf_valido(nota.destinatario.cpf),
                   f"CPF do destinatário inválido: {nota.destinatario.cpf}")
 
-    # NF-e e NFC-e sempre têm chave de acesso; NFS-e municipais geralmente não
-    if nota.tipo_documento in (TipoDocumento.NFE, TipoDocumento.NFCE) or nota.chave_acesso:
+    # NF-e e NFC-e sempre têm a chave de 44 dígitos. A NFS-e fica de fora: a do padrão nacional
+    # tem 50 dígitos e as municipais usam códigos de verificação próprios, sem regra única.
+    if nota.tipo_documento in (TipoDocumento.NFE, TipoDocumento.NFCE) or (
+        nota.chave_acesso and nota.tipo_documento != TipoDocumento.NFSE
+    ):
         verificar("chave_acesso", bool(nota.chave_acesso) and chave_acesso_valida(nota.chave_acesso),
                   f"Chave de acesso ausente ou inválida: {nota.chave_acesso}")
 

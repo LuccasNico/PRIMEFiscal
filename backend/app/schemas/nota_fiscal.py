@@ -6,7 +6,7 @@ O mesmo modelo Pydantic é usado em três lugares:
 3. como base para a validação fiscal e para a avaliação contra o XML.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -112,11 +112,15 @@ class Metadados(BaseModel):
 
 
 class StatusNota(str, Enum):
-    PENDENTE = "pendente"
-    PROCESSADA = "processada"
-    REVISAR = "revisar"
-    REVISADA = "revisada"
-    ERRO = "erro"
+    PENDENTE = "pendente"  # na fila, aguardando a vez
+    PROCESSANDO = "processando"  # sendo lida pela IA neste momento
+    PROCESSADA = "processada"  # extraída e aprovada na validação fiscal
+    REVISAR = "revisar"  # extraída, mas com inconsistências apontadas pela validação
+    REVISADA = "revisada"  # corrigida manualmente
+    ERRO = "erro"  # a extração falhou
+
+
+STATUS_NA_FILA = (StatusNota.PENDENTE, StatusNota.PROCESSANDO)
 
 
 class NotaFiscalResposta(BaseModel):
@@ -125,14 +129,23 @@ class NotaFiscalResposta(BaseModel):
     id: int
     arquivo: str
     status: StatusNota
-    lote_id: str | None = None
+    lote_id: str | None = Field(None, description="Identifica as notas enviadas na mesma requisição")
+    abordagem: str | None = None
+    tem_pdf: bool = Field(False, description="Indica se o PDF original está guardado no servidor")
     criado_em: datetime
+    enfileirado_em: datetime | None = None
+    iniciado_em: datetime | None = None
     dados: NotaFiscalExtraida | None = None
     validacao: ResultadoValidacao | None = None
     metadados: Metadados | None = None
     erro: str | None = None
 
+    @field_validator("criado_em", "enfileirado_em", "iniciado_em")
+    @classmethod
+    def _em_utc(cls, valor: datetime | None) -> datetime | None:
+        # As datas são gravadas em UTC, mas o SQLite as devolve sem fuso
+        return valor.replace(tzinfo=timezone.utc) if valor and valor.tzinfo is None else valor
 
-class LoteResposta(BaseModel):
-    lote_id: str
-    notas: list[int]
+
+class RemocaoResposta(BaseModel):
+    removidas: int

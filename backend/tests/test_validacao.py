@@ -98,3 +98,14 @@ def test_nfse_sem_chave_de_acesso_e_aceita():
     resultado = validar_nota(nota_exemplo(tipo_documento=TipoDocumento.NFSE, chave_acesso=None))
     assert "chave_acesso" not in resultado.verificacoes
     assert resultado.valido
+
+
+def test_nfse_nacional_com_chave_de_50_digitos_nao_e_reprovada():
+    resultado = validar_nota(nota_exemplo(tipo_documento=TipoDocumento.NFSE, chave_acesso="4" * 50))
+    assert "chave_acesso" not in resultado.verificacoes
+    assert resultado.valido
+
+
+def test_nfe_sem_chave_de_acesso_e_reprovada():
+    resultado = validar_nota(nota_exemplo(chave_acesso=None))
+    assert resultado.verificacoes["chave_acesso"] is False
