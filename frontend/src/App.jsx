@@ -15,7 +15,7 @@ function Cabecalho({ saude }) {
       </div>
       {saude && (
         <p className="provedor">
-          IA: <strong>{saude.provedor === 'lmstudio' ? 'LM Studio (local)' : 'Claude API'}</strong>
+          IA: <strong>{saude.provedor === 'lmstudio' ? 'LM Studio (local)' : saude.provedor === 'claude' ? 'Claude API' : saude.nome_provedor}</strong>
           <br />
           {saude.modelo}
         </p>
@@ -55,7 +55,7 @@ export default function App() {
           <AreaUpload
             aoEnviar={aoEnviar}
             tamanhoMaximoMb={saude?.tamanho_maximo_mb}
-            modeloLocal={saude?.provedor === 'lmstudio'}
+            requerModeloVisao={saude?.requer_modelo_visao_pdf}
           />
 
           {erro && (

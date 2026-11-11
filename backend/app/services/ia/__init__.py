@@ -1,4 +1,4 @@
-"""Seleciona o provedor de IA configurado em PROVEDOR_IA (claude ou lmstudio)."""
+"""Seleciona o provedor de IA configurado em PROVEDOR_IA."""
 
 from app.config import configuracoes
 from app.schemas.nota_fiscal import Metadados, NotaFiscalExtraida
@@ -12,6 +12,14 @@ def _provedor():
         from app.services.ia import lmstudio
 
         return lmstudio
+    if configuracoes.provedor_ia == "compativel":
+        from app.services.ia import compativel
+
+        return compativel
+    if configuracoes.provedor_ia == "gemini":
+        from app.services.ia import gemini
+
+        return gemini
     from app.services.ia import claude
 
     return claude

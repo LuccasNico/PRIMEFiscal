@@ -23,6 +23,8 @@ frontend/   Interface React + Vite
 - Node.js 20+
 - Um provedor de IA, à escolha (`PROVEDOR_IA` no `.env`):
   - **Claude API:** chave em [console.anthropic.com](https://console.anthropic.com/) (uso pago por token);
+  - **Google Gemini:** chave em [Google AI Studio](https://aistudio.google.com/app/apikey);
+  - **API compatível com OpenAI:** OpenAI, Groq, OpenRouter, Together, Ollama, vLLM e outras que exponham `POST /v1/chat/completions`;
   - **LM Studio:** modelo local e gratuito (veja abaixo).
 
 ### Backend
@@ -47,6 +49,28 @@ Testes: `pytest`
 3. No `backend/.env`, defina `PROVEDOR_IA=lmstudio` e, opcionalmente, `LMSTUDIO_MODELO` com o identificador do modelo.
 
 Modelos locais não leem PDF diretamente: na abordagem `texto` recebem o texto extraído pelo pdfplumber; na abordagem `pdf`, as páginas são enviadas como imagens.
+
+### Usando Google Gemini ou outra API
+
+Para Gemini, defina no `backend/.env`:
+
+```env
+PROVEDOR_IA=gemini
+GEMINI_API_KEY=sua_chave
+GEMINI_MODELO=gemini-2.5-flash
+```
+
+Para provedores compatíveis com a API de Chat Completions da OpenAI, use `PROVEDOR_IA=compativel` e informe URL base (incluindo `/v1`), chave e modelo:
+
+```env
+PROVEDOR_IA=compativel
+API_COMPATIVEL_URL=https://api.openai.com/v1
+API_COMPATIVEL_CHAVE=sua_chave
+API_COMPATIVEL_MODELO=gpt-4o-mini
+API_COMPATIVEL_NOME=OpenAI
+```
+
+O formato de saída padrão é `json_schema`. Se o seu provedor não o implementar, altere `API_COMPATIVEL_FORMATO_RESPOSTA` para `json_object` ou `prompt`. Na abordagem `pdf`, Gemini e APIs compatíveis exigem um modelo com visão. APIs com protocolo próprio, que não sejam Gemini nem compatíveis com OpenAI, precisam de um adaptador específico.
 
 ### Frontend
 
