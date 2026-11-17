@@ -2,6 +2,7 @@ fastapi[standard]
 anthropic>=1.0
 pdfplumber
 sqlalchemy>=2.0
+psycopg[binary]  # PostgreSQL (banco na nuvem)
 python-dotenv
 pytest
 httpx

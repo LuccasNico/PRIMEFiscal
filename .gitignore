@@ -16,11 +16,15 @@ venv/
 dados/
 uploads/
 
+# Relatório do TCC (documentos Word/PDF, versionados fora do repositório)
+Relatorio/
+
 # Node
 node_modules/
 dist/
 
 # Editores / SO
+.claude/
 .vscode/
 .idea/
 .DS_Store

@@ -30,8 +30,27 @@ def _provedor_ia() -> str:
     return APELIDOS_DE_PROVEDOR.get(nome, nome)
 
 
+def url_do_banco(url: str) -> str:
+    """Ajusta a URL do banco. Vazia = SQLite em backend/primefiscal.db.
+
+    Serviços de PostgreSQL na nuvem (Neon, Supabase, Render, Railway) fornecem a URL como
+    ``postgres://`` ou ``postgresql://``; o SQLAlchemy precisa do nome do driver (psycopg).
+    """
+    if not url:
+        return f"sqlite:///{(PASTA_BACKEND / 'primefiscal.db').as_posix()}"
+    for prefixo in ("postgres://", "postgresql://"):
+        if url.startswith(prefixo):
+            return "postgresql+psycopg://" + url.removeprefix(prefixo)
+    return url
+
+
 def _lista(texto: str) -> list[str]:
     return [item.strip() for item in texto.split(",") if item.strip()]
+
+
+def _origens(texto: str) -> list[str]:
+    """Origens do CORS. O navegador envia a origem sem barra no fim, então ela é removida."""
+    return [origem.rstrip("/") for origem in _lista(texto)]
 
 
 @dataclass(frozen=True)
@@ -62,10 +81,10 @@ class Configuracoes:
     compativel_formato_resposta: str = valor_ambiente("API_COMPATIVEL_FORMATO_RESPOSTA", "json_schema").lower()
 
     # Os caminhos padrão ficam dentro de backend/, independentemente de onde o servidor é iniciado
-    database_url: str = valor_ambiente("DATABASE_URL") or f"sqlite:///{(PASTA_BACKEND / 'primefiscal.db').as_posix()}"
+    database_url: str = url_do_banco(valor_ambiente("DATABASE_URL"))
     pasta_uploads: Path = Path(valor_ambiente("PASTA_UPLOADS") or PASTA_BACKEND / "uploads")
     cors_origins: list[str] = field(
-        default_factory=lambda: _lista(valor_ambiente("CORS_ORIGINS", "http://localhost:5173"))
+        default_factory=lambda: _origens(valor_ambiente("CORS_ORIGINS", "http://localhost:5173"))
     )
     tamanho_maximo_bytes: int = int(valor_ambiente("TAMANHO_MAXIMO_MB", "20")) * 1024 * 1024
 

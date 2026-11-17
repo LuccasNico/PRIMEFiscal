@@ -32,8 +32,20 @@ function Cabecalho({ saude }) {
 }
 
 export default function App() {
-  const { notas, fila, concluidas, saude, erro, dispensarErro, enviar, remover, esvaziarFila, reprocessar, reprocessarVarias } =
-    useNotas()
+  const {
+    notas,
+    fila,
+    concluidas,
+    saude,
+    erro,
+    dispensarErro,
+    enviar,
+    remover,
+    esvaziarFila,
+    reprocessar,
+    reprocessarVarias,
+    salvarNoBanco,
+  } = useNotas()
   const [selecionadaId, setSelecionadaId] = useState(null)
 
   const selecionada = notas.find((nota) => nota.id === selecionadaId)
@@ -93,6 +105,7 @@ export default function App() {
               posicaoNaFila={aguardando.indexOf(selecionada) + 1}
               aoReprocessar={reprocessar}
               aoRemover={remover}
+              aoSalvarNoBanco={salvarNoBanco}
             />
           ) : (
             <p className="vazio">

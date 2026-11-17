@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ROTULOS_STATUS } from '../formatos.js'
 import BotaoConfirmar from './BotaoConfirmar.jsx'
-import { IconeLixeira, IconeRepetir } from './Icones.jsx'
+import { IconeBanco, IconeLixeira, IconeRepetir } from './Icones.jsx'
 
 const FILTROS = [
   { id: 'todas', rotulo: 'Todas', aceita: () => true },
@@ -9,6 +9,16 @@ const FILTROS = [
   { id: 'revisar', rotulo: 'Revisar', aceita: (nota) => nota.status === 'revisar' },
   { id: 'erro', rotulo: 'Com erro', aceita: (nota) => nota.status === 'erro' },
 ]
+
+function MarcaNoBanco({ banco }) {
+  const descricao = banco.em_dia ? 'Salva no banco' : 'Alterada depois de salva no banco'
+  return (
+    <span className={`marca-banco ${banco.em_dia ? '' : 'desatualizada'}`} title={descricao}>
+      <IconeBanco />
+      <span className="sr-only">{descricao}</span>
+    </span>
+  )
+}
 
 /** Notas que já saíram da fila: concluídas, para revisar, corrigidas ou com erro. */
 export default function ListaNotas({ notas, selecionadaId, aoSelecionar, aoRemover, aoReprocessar, aoReprocessarVarias }) {
@@ -60,6 +70,7 @@ export default function ListaNotas({ notas, selecionadaId, aoSelecionar, aoRemov
               </span>
               <span className="secundario">{nota.dados?.tipo_documento ?? ''}</span>
               <span className={`status status-${nota.status}`}>{ROTULOS_STATUS[nota.status] ?? nota.status}</span>
+              {nota.no_banco && <MarcaNoBanco banco={nota.no_banco} />}
             </button>
             {nota.status === 'erro' && nota.tem_pdf && (
               <button

@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import armazenamento
@@ -15,6 +16,7 @@ from app.schemas.nota_fiscal import (
     RemocaoResposta,
     StatusNota,
 )
+from app.services import banco_notas
 from app.services.fila import fila
 from app.services.processamento import Abordagem
 from app.services.validacao import validar_nota
@@ -179,7 +181,33 @@ def reprocessar_nota(
     return registro
 
 
-@router.delete("/{nota_id}", status_code=204, summary="Remove a nota (ou a retira da fila) e apaga o PDF guardado")
+@router.post(
+    "/{nota_id}/salvar",
+    response_model=NotaFiscalResposta,
+    summary="Salva a nota no banco de notas (ou atualiza a cópia já salva)",
+)
+def salvar_no_banco(nota_id: int, sessao: Session = Depends(obter_sessao)):
+    """Grava o JSON extraído e os mesmos dados em tabelas relacionais (participantes, itens, pagamentos).
+    A nota salva fica disponível em `/api/banco/notas` mesmo que depois seja excluída daqui."""
+    registro = _buscar(nota_id, sessao)
+    try:
+        banco_notas.salvar(sessao, registro)
+        sessao.commit()
+    except banco_notas.ErroAoSalvar as e:
+        sessao.rollback()
+        raise HTTPException(e.status_http, str(e)) from e
+    except IntegrityError as e:
+        sessao.rollback()
+        raise HTTPException(409, "A nota conflita com dados já gravados no banco (CNPJ, CPF ou chave repetidos).") from e
+    sessao.refresh(registro)
+    return registro
+
+
+@router.delete(
+    "/{nota_id}",
+    status_code=204,
+    summary="Remove a nota (ou a retira da fila) e apaga o PDF guardado; a cópia no banco de notas é mantida",
+)
 def remover_nota(nota_id: int, sessao: Session = Depends(obter_sessao)):
     registro = _buscar(nota_id, sessao)
     if registro.status == StatusNota.PROCESSANDO.value:

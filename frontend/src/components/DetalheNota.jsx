@@ -4,15 +4,17 @@ import {
   chaveDeAcesso,
   cnpjOuCpf,
   dataBrasileira,
+  dataHora,
   endereco,
   moeda,
   naFila,
+  podeSalvarNoBanco,
   quantidade,
   ROTULOS_ABORDAGEM,
   ROTULOS_STATUS,
 } from '../formatos.js'
 import BotaoConfirmar from './BotaoConfirmar.jsx'
-import { Girando } from './Icones.jsx'
+import { Girando, IconeBanco } from './Icones.jsx'
 
 const ROTULOS_VERIFICACAO = {
   tipo_identificado: 'Tipo de documento identificado',
@@ -207,8 +209,62 @@ function DadosExtraidos({ nota }) {
   )
 }
 
+/**
+ * Grava a nota no banco de notas. Some quando a cópia salva está em dia e vira "Atualizar"
+ * quando a nota foi corrigida ou reprocessada depois de salva.
+ */
+function SalvarNoBanco({ nota, aoSalvar }) {
+  const [salvando, setSalvando] = useState(false)
+  const banco = nota.no_banco
+
+  if (banco?.em_dia) return null
+
+  async function salvar() {
+    setSalvando(true)
+    await aoSalvar(nota.id)
+    setSalvando(false)
+  }
+
+  const conteudo = (
+    <>
+      <IconeBanco /> {salvando ? 'Salvando…' : banco ? 'Atualizar no banco' : 'Salvar no banco'}
+    </>
+  )
+
+  // Com inconsistências apontadas pela validação, pede confirmação antes de gravar
+  if (nota.status === 'revisar' && !salvando) {
+    return (
+      <BotaoConfirmar
+        className="primario com-icone"
+        aoConfirmar={salvar}
+        rotuloConfirmar="Salvar mesmo assim?"
+        title="A validação fiscal apontou inconsistências nesta nota"
+      >
+        {conteudo}
+      </BotaoConfirmar>
+    )
+  }
+  return (
+    <button type="button" className="primario com-icone" onClick={salvar} disabled={salvando}>
+      {conteudo}
+    </button>
+  )
+}
+
+function SituacaoNoBanco({ banco }) {
+  if (!banco) return null
+  return (
+    <p className={`situacao-banco ${banco.em_dia ? '' : 'desatualizada'}`} title={`Registro nº ${banco.id} do banco de notas`}>
+      <IconeBanco />
+      {banco.em_dia
+        ? `Salva no banco em ${dataHora(banco.atualizada_em)}`
+        : 'Alterada depois de salva: atualize o banco para gravar a versão atual'}
+    </p>
+  )
+}
+
 /** Dados de uma nota, com as ações disponíveis e o PDF original ao lado para conferência. */
-export default function DetalheNota({ nota, posicaoNaFila, aoReprocessar, aoRemover }) {
+export default function DetalheNota({ nota, posicaoNaFila, aoReprocessar, aoRemover, aoSalvarNoBanco }) {
   const [mostrarPdf, setMostrarPdf] = useState(false)
   const [abordagem, setAbordagem] = useState(nota.abordagem ?? 'texto')
 
@@ -226,9 +282,11 @@ export default function DetalheNota({ nota, posicaoNaFila, aoReprocessar, aoRemo
             {titulo} <span className={`status status-${nota.status}`}>{ROTULOS_STATUS[nota.status]}</span>
           </h2>
           {nota.dados && <p className="secundario">{nota.arquivo}</p>}
+          {!emFila && <SituacaoNoBanco banco={nota.no_banco} />}
         </div>
 
         <div className="acoes">
+          {podeSalvarNoBanco(nota) && <SalvarNoBanco nota={nota} aoSalvar={aoSalvarNoBanco} />}
           {nota.dados && !emFila && (
             <button type="button" onClick={() => baixarJson(nota)}>
               Baixar JSON
@@ -243,7 +301,13 @@ export default function DetalheNota({ nota, posicaoNaFila, aoReprocessar, aoRemo
             aoConfirmar={() => aoRemover(nota.id)}
             rotuloConfirmar={emFila ? 'Remover da fila?' : 'Excluir nota?'}
             disabled={processando}
-            title={processando ? 'Em processamento: aguarde a conclusão para remover' : undefined}
+            title={
+              processando
+                ? 'Em processamento: aguarde a conclusão para remover'
+                : nota.no_banco
+                  ? 'Remove só desta lista: a cópia salva no banco continua lá'
+                  : undefined
+            }
           >
             {emFila ? 'Remover da fila' : 'Excluir'}
           </BotaoConfirmar>

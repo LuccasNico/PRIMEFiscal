@@ -98,6 +98,7 @@ export function useNotas() {
   const remover = useCallback((id) => executar(() => api.removerNota(id)), [executar])
   const esvaziarFila = useCallback(() => executar(() => api.esvaziarFila()), [executar])
   const reprocessar = useCallback((id, abordagem) => executar(() => api.reprocessarNota(id, abordagem)), [executar])
+  const salvarNoBanco = useCallback((id) => executar(() => api.salvarNoBanco(id)), [executar])
   const reprocessarVarias = useCallback(
     (ids) => executar(() => Promise.all(ids.map((id) => api.reprocessarNota(id)))),
     [executar],
@@ -118,5 +119,6 @@ export function useNotas() {
     esvaziarFila,
     reprocessar,
     reprocessarVarias,
+    salvarNoBanco,
   }
 }

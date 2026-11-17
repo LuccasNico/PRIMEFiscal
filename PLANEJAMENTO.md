@@ -41,7 +41,9 @@ Número, série, chave de acesso, data de emissão, emitente (razão social, CNP
              │                              ▼                                     │
              │              Validação fiscal (regras determinísticas)             │
              │                              ▼                                     │
-             │                    JSON + status ─► Banco (SQLite/PostgreSQL)      │
+             │                    JSON + status ─► Área de trabalho (fila)        │
+             │                              ▼  usuário confere e salva            │
+             │          Banco de notas: JSON + tabelas relacionais (PostgreSQL)   │
              └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -70,10 +72,24 @@ Gemini e Claude recebem o PDF direto; LM Studio e as APIs no padrão da OpenAI r
 
 ### Stack
 
-- **Backend:** Python 3.12+, FastAPI, Pydantic, httpx, SDK `anthropic`, pdfplumber, SQLAlchemy (SQLite no desenvolvimento, PostgreSQL opcional)
+- **Backend:** Python 3.12+, FastAPI, Pydantic, httpx, SDK `anthropic`, pdfplumber, SQLAlchemy (SQLite no desenvolvimento, PostgreSQL no deploy)
 - **Frontend:** React + Vite
 - **IA:** Google Gemini por padrão (`gemini-3.5-flash`); Claude, LM Studio e APIs no padrão da OpenAI como alternativas. Provedor e modelo são configuráveis no `.env` para os experimentos
 - **Versionamento:** Git + GitHub (`PRIMEFiscal`)
+
+### Banco de dados
+
+Script de criação (PostgreSQL): [`banco/criar_banco.sql`](banco/criar_banco.sql). As mesmas tabelas estão em `backend/app/db.py`, e um teste confere que os dois continuam iguais.
+
+| Tabela | Conteúdo | Relacionamentos |
+|---|---|---|
+| `notas_fiscais` | Área de trabalho: fila e resultado de cada extração (JSON) | 1 : 0..1 com `notas_salvas` |
+| `notas_salvas` | Nota conferida: identificação, totais, impostos (1:1, na própria tabela) e o JSON completo (JSONB) | N : 1 com `participantes` (emitente e destinatário) |
+| `participantes` | Emitentes e destinatários, um por CNPJ/CPF (únicos) | — |
+| `itens_nota` | Produtos ou serviços, numerados na ordem da nota | N : 1 com `notas_salvas` (ON DELETE CASCADE) |
+| `pagamentos_nota` | Formas de pagamento | N : 1 com `notas_salvas` (ON DELETE CASCADE) |
+
+Decisões: o JSON fica guardado inteiro (fonte fiel do que foi extraído) e as tabelas relacionais permitem consultas em SQL; a chave de acesso é única, para a mesma nota não entrar duas vezes; excluir a nota da área de trabalho não apaga a cópia salva (`processamento_id` vira NULL).
 
 ### Endpoints
 
@@ -87,7 +103,11 @@ Gemini e Claude recebem o PDF direto; LM Studio e as APIs no padrão da OpenAI r
 | GET | `/api/notas/{id}/pdf` | PDF original |
 | PUT | `/api/notas/{id}` | Correção manual e revalidação |
 | POST | `/api/notas/{id}/reprocessar` | Devolve a nota à fila |
-| DELETE | `/api/notas/{id}` | Remove a nota e o PDF guardado |
+| POST | `/api/notas/{id}/salvar` | Salva a nota no banco de notas (ou atualiza a cópia) |
+| DELETE | `/api/notas/{id}` | Remove a nota e o PDF guardado (a cópia no banco de notas continua) |
+| GET | `/api/banco/notas` | Lista as notas salvas (filtros: tipo, emitente, período) |
+| GET | `/api/banco/notas/{id}` | Nota salva, com o JSON extraído |
+| DELETE | `/api/banco/notas/{id}` | Remove a nota do banco de notas |
 
 Documentação automática em `http://localhost:8000/docs` (Swagger), usada como evidência de "integração com ERPs".
 
@@ -185,7 +205,7 @@ A4 · margens: superior/esquerda 3 cm, inferior/direita 2 cm · Arial ou Times 1
 - [x] **Fase 0:** Planejamento e esqueleto do projeto
 - [ ] **Fase 1:** Montagem do dataset (PDF + XML) e anonimização
 - [x] **Fase 2:** Extração com IA (PDF direto e texto, provedores intercambiáveis) + validação fiscal
-- [ ] **Fase 3:** Persistência, histórico e correção manual (*esqueleto pronto*)
+- [ ] **Fase 3:** Persistência, histórico e correção manual (*banco de notas e script PostgreSQL prontos; faltam a tela de histórico e a edição na interface*)
 - [ ] **Fase 4:** Frontend completo (upload, revisão lado a lado com o PDF, histórico)
 - [x] **Fase 5:** Processamento em lote robusto (fila, reprocessamento, status)
 - [ ] **Fase 6:** Script de avaliação contra XML + baseline regex

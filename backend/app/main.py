@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import configuracoes
 from app.db import criar_tabelas
-from app.routers import notas
+from app.routers import banco, notas
 from app.services import ia
 from app.services.fila import fila
 
@@ -21,7 +21,7 @@ async def ciclo_de_vida(app: FastAPI):
 app = FastAPI(
     title="PRIMEFiscal API",
     description="Extração e estruturação automatizada de dados de notas fiscais (NF-e, NFC-e, NFS-e) com IA.",
-    version="0.3.0",
+    version="0.4.0",
     lifespan=ciclo_de_vida,
 )
 
@@ -33,6 +33,7 @@ app.add_middleware(
 )
 
 app.include_router(notas.router)
+app.include_router(banco.router)
 
 
 @app.get("/api/saude", tags=["sistema"], summary="Informa se a API está no ar, qual IA está em uso e os limites de envio")

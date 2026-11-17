@@ -6,10 +6,19 @@ O mesmo modelo Pydantic é usado em três lugares:
 3. como base para a validação fiscal e para a avaliação contra o XML.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
+
+
+def _em_utc(valor: datetime | None) -> datetime | None:
+    # As datas são gravadas em UTC, mas o SQLite as devolve sem fuso
+    return valor.replace(tzinfo=timezone.utc) if valor and valor.tzinfo is None else valor
+
+
+DataHoraUTC = Annotated[datetime, AfterValidator(_em_utc)]
 
 
 class TipoDocumento(str, Enum):
@@ -124,6 +133,19 @@ class StatusNota(str, Enum):
 STATUS_NA_FILA = (StatusNota.PENDENTE, StatusNota.PROCESSANDO)
 
 
+# Status em que a extração terminou com sucesso e a nota pode ir para o banco de notas
+STATUS_QUE_PODEM_SER_SALVOS = (StatusNota.PROCESSADA, StatusNota.REVISAR, StatusNota.REVISADA)
+
+
+class SituacaoNoBanco(BaseModel):
+    id: int = Field(description="Id da nota no banco de notas (/api/banco/notas/{id})")
+    salva_em: DataHoraUTC
+    atualizada_em: DataHoraUTC
+    em_dia: bool = Field(
+        description="Falso quando a nota foi corrigida ou reprocessada depois de salva: salve de novo para atualizar"
+    )
+
+
 class NotaFiscalResposta(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -133,19 +155,44 @@ class NotaFiscalResposta(BaseModel):
     lote_id: str | None = Field(None, description="Identifica as notas enviadas na mesma requisição")
     abordagem: str | None = None
     tem_pdf: bool = Field(False, description="Indica se o PDF original está guardado no servidor")
-    criado_em: datetime
-    enfileirado_em: datetime | None = None
-    iniciado_em: datetime | None = None
+    criado_em: DataHoraUTC
+    enfileirado_em: DataHoraUTC | None = None
+    iniciado_em: DataHoraUTC | None = None
     dados: NotaFiscalExtraida | None = None
     validacao: ResultadoValidacao | None = None
     metadados: Metadados | None = None
     erro: str | None = None
+    no_banco: SituacaoNoBanco | None = Field(None, description="Preenchido quando a nota já foi salva no banco de notas")
 
-    @field_validator("criado_em", "enfileirado_em", "iniciado_em")
-    @classmethod
-    def _em_utc(cls, valor: datetime | None) -> datetime | None:
-        # As datas são gravadas em UTC, mas o SQLite as devolve sem fuso
-        return valor.replace(tzinfo=timezone.utc) if valor and valor.tzinfo is None else valor
+
+class NotaSalvaResumo(BaseModel):
+    """Nota do banco de notas, sem o JSON completo."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    processamento_id: int | None = Field(
+        None, description="Nota da área de trabalho (/api/notas/{id}) que deu origem a esta; nulo se foi excluída"
+    )
+    tipo_documento: TipoDocumento
+    chave_acesso: str | None = None
+    numero: str | None = None
+    serie: str | None = None
+    data_emissao: date | None = None
+    emitente_nome: str | None = None
+    emitente_documento: str | None = Field(None, description="CNPJ ou CPF do emitente")
+    valor_total_nota: float | None = None
+    arquivo: str | None = Field(None, description="Nome do PDF de origem")
+    salva_em: DataHoraUTC
+    atualizada_em: DataHoraUTC
+
+
+class NotaSalvaDetalhe(NotaSalvaResumo):
+    dados: NotaFiscalExtraida = Field(description="O JSON extraído da nota")
+    validacao: ResultadoValidacao | None = None
+    abordagem: str | None = None
+    provedor_ia: str | None = None
+    modelo_ia: str | None = None
 
 
 class RemocaoResposta(BaseModel):

@@ -213,6 +213,18 @@ button.link.perigo {
   font-weight: 600;
 }
 
+button.com-icone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+button.primario.perigo {
+  background: var(--erro);
+  border-color: var(--erro);
+  color: #fff;
+}
+
 .botao-icone {
   display: inline-flex;
   align-items: center;
@@ -452,6 +464,16 @@ button.link.perigo {
   color: var(--erro);
 }
 
+.marca-banco {
+  display: inline-flex;
+  flex: none;
+  color: var(--ok);
+}
+
+.marca-banco.desatualizada {
+  color: var(--aviso);
+}
+
 /* ---------- Detalhe da nota ---------- */
 
 .detalhe-topo {
@@ -471,6 +493,19 @@ button.link.perigo {
 .detalhe-topo p {
   margin: 2px 0 0;
   overflow-wrap: anywhere;
+}
+
+.detalhe-topo .situacao-banco {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: var(--ok);
+}
+
+.detalhe-topo .situacao-banco.desatualizada {
+  color: var(--aviso);
 }
 
 .acoes {

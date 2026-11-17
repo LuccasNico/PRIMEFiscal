@@ -14,6 +14,10 @@ export const ROTULOS_ABORDAGEM = {
 
 export const naFila = (nota) => nota.status === 'pendente' || nota.status === 'processando'
 
+/** Notas cuja extração terminou com sucesso podem ir para o banco de notas */
+export const podeSalvarNoBanco = (nota) =>
+  Boolean(nota.dados) && ['processada', 'revisar', 'revisada'].includes(nota.status)
+
 export const moeda = (valor) =>
   valor == null ? '—' : valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -27,6 +31,10 @@ export function duracao(milissegundos) {
   const segundos = Math.max(0, Math.floor(milissegundos / 1000))
   return `${Math.floor(segundos / 60)}:${String(segundos % 60).padStart(2, '0')}`
 }
+
+/** Data e hora local, ex.: "17/11/2026, 14:32" */
+export const dataHora = (iso) =>
+  iso ? new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—'
 
 /** "2026-08-11" -> "11/08/2026" */
 export function dataBrasileira(iso) {

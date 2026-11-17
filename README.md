@@ -4,7 +4,7 @@ Extração e estruturação automatizada de dados de notas fiscais (NF-e, NFC-e 
 
 Protótipo do TCC *"Aplicação de Técnicas de Inteligência Artificial no Processamento e Estruturação Automatizada de Dados de Documentos Fiscais"* — FATEC Praia Grande, CST em Análise e Desenvolvimento de Sistemas.
 
-O usuário envia PDFs de notas fiscais, que entram em uma fila e são lidos um por vez por um modelo de IA. O modelo identifica o tipo do documento e extrai os dados. Em seguida, os dados são conferidos com regras fiscais (dígitos verificadores, somas) e ficam disponíveis em JSON, prontos para banco de dados, ERPs ou outros sistemas.
+O usuário envia PDFs de notas fiscais, que entram em uma fila e são lidos um por vez por um modelo de IA. O modelo identifica o tipo do documento e extrai os dados. Em seguida, os dados são conferidos com regras fiscais (dígitos verificadores, somas) e ficam disponíveis em JSON. Depois de conferir a nota, o usuário a salva no banco de notas, que guarda o JSON e os mesmos dados em tabelas relacionais, prontos para consultas, ERPs ou outros sistemas.
 
 Veja o [PLANEJAMENTO.md](PLANEJAMENTO.md) para arquitetura, experimentos e roadmap.
 
@@ -13,6 +13,7 @@ Veja o [PLANEJAMENTO.md](PLANEJAMENTO.md) para arquitetura, experimentos e roadm
 ```
 backend/    API FastAPI: fila de processamento, extração com IA, validação e banco de dados
 frontend/   Interface React + Vite
+banco/      Script SQL que cria o banco no PostgreSQL (para o deploy na nuvem)
 ```
 
 ## Provedores de IA
@@ -54,7 +55,7 @@ uvicorn app.main:app --reload
 
 Depois, preencha no `backend/.env` a chave do provedor (para o padrão, `GEMINI_API_KEY`).
 
-A API fica em `http://localhost:8000`, com documentação interativa em `http://localhost:8000/docs`. Para rodar os testes: `pytest`.
+A API fica em `http://localhost:8000`, com documentação interativa em `http://localhost:8000/docs`. Para rodar os testes: `pytest` (para rodá-los num PostgreSQL, defina `DATABASE_URL_TESTES` com um banco **descartável**, que é apagado a cada teste).
 
 ### Frontend
 
@@ -84,6 +85,59 @@ API_COMPATIVEL_MODELO=nome-do-modelo
 
 Se o serviço recusar o formato de resposta padrão (`json_schema`), troque `API_COMPATIVEL_FORMATO_RESPOSTA` para `json_object` ou `prompt`.
 
+## Banco de dados
+
+O banco tem duas partes:
+
+- **Área de trabalho** (`notas_fiscais`): a fila e o resultado de cada extração, que ainda pode ser reprocessado ou corrigido.
+- **Banco de notas** (`notas_salvas`, `participantes`, `itens_nota`, `pagamentos_nota`): as notas que o usuário conferiu e salvou com o botão **Salvar no banco**. Guarda o JSON extraído (coluna `dados`) e os mesmos dados em tabelas relacionais. Emitentes e destinatários são cadastrados uma vez por CNPJ/CPF, e a chave de acesso não se repete. Se a nota for corrigida ou reprocessada depois de salva, a interface avisa e o botão vira **Atualizar no banco**.
+
+No desenvolvimento o banco é um SQLite em `backend/primefiscal.db`, criado automaticamente.
+
+### Banco na nuvem (deploy)
+
+1. Crie um banco PostgreSQL em um serviço de nuvem (Neon, Supabase, Render, Railway etc.) e copie a URL de conexão.
+2. Crie as tabelas rodando [`banco/criar_banco.sql`](banco/criar_banco.sql) uma vez, no editor SQL do serviço ou pelo terminal:
+   ```bash
+   psql "postgresql://usuario:senha@servidor:5432/banco?sslmode=require" -f banco/criar_banco.sql
+   ```
+3. No servidor do backend, defina a variável `DATABASE_URL` com essa URL (`postgres://` e `postgresql://` são aceitos).
+
+O script pode ser rodado de novo sem perder dados. Ele também liga a Row Level Security nas tabelas: em serviços que publicam as tabelas numa API REST automática (como o Supabase), essa API fica bloqueada, e só o backend acessa os dados.
+
+## Deploy no Render
+
+Crie os três recursos no painel do Render, na **mesma região** (assim a API e o banco se comunicam pela rede interna, sem SSL nem certificado).
+
+1. **Banco:** New > Postgres. Depois de criado, copie a **Internal Database URL**.
+2. **API:** New > Web Service, apontando para o repositório.
+   - Root Directory: `backend`
+   - Runtime: Python
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT` (um único processo: a fila roda numa thread dentro dele)
+   - Health Check Path: `/api/saude`
+   - Variáveis de ambiente:
+
+     | Variável | Valor |
+     |---|---|
+     | `PYTHON_VERSION` | `3.13.5` |
+     | `DATABASE_URL` | a Internal Database URL do passo 1 |
+     | `GEMINI_API_KEY` | a chave do Gemini |
+     | `CORS_ORIGINS` | a URL do frontend (passo 3), ex.: `https://primefiscal.onrender.com` |
+     | `PASTA_UPLOADS` | `/tmp/primefiscal-uploads` |
+
+3. **Interface:** New > Static Site, apontando para o repositório.
+   - Root Directory: `frontend`
+   - Build Command: `npm ci && npm run build`
+   - Publish Directory: `dist`
+   - Variável de ambiente: `VITE_API_URL` = a URL da API (passo 2), ex.: `https://primefiscal-api.onrender.com`. Ela é lida no build: se mudar, reimplante o site.
+
+Como uma URL depende da outra, crie os dois serviços, copie os endereços que o Render gerou e só então preencha `CORS_ORIGINS` e `VITE_API_URL`.
+
+O backend cria as tabelas sozinho na primeira inicialização; rodar o `banco/criar_banco.sql` é opcional.
+
+Limites do plano gratuito: a API dorme após 15 minutos sem uso (o primeiro acesso depois disso leva cerca de 1 minuto), o banco expira 30 dias após a criação e o disco é temporário, então os PDFs originais somem quando a API dorme ou é reimplantada (os dados extraídos continuam no banco).
+
 ## API
 
 | Método | Rota | Descrição |
@@ -96,7 +150,11 @@ Se o serviço recusar o formato de resposta padrão (`json_schema`), troque `API
 | GET | `/api/notas/{id}/pdf` | PDF original |
 | PUT | `/api/notas/{id}` | Correção manual dos dados (a nota é validada de novo) |
 | POST | `/api/notas/{id}/reprocessar` | Devolve a nota à fila para uma nova extração |
-| DELETE | `/api/notas/{id}` | Remove a nota (ou a retira da fila) e apaga o PDF |
+| POST | `/api/notas/{id}/salvar` | Salva a nota no banco de notas (ou atualiza a cópia já salva) |
+| DELETE | `/api/notas/{id}` | Remove a nota (ou a retira da fila) e apaga o PDF; a cópia no banco de notas continua |
+| GET | `/api/banco/notas` | Lista as notas salvas (filtros opcionais `tipo_documento`, `documento_emitente`, `emitida_de`, `emitida_ate`) |
+| GET | `/api/banco/notas/{id}` | Nota salva, com o JSON extraído |
+| DELETE | `/api/banco/notas/{id}` | Remove a nota do banco de notas |
 
 ## Privacidade
 

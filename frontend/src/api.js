@@ -1,3 +1,7 @@
+// Endereço da API. Vazio no desenvolvimento (o Vite repassa /api ao backend); no deploy, o
+// Static Site do Render recebe VITE_API_URL com a URL do backend (ex.: https://primefiscal-api.onrender.com)
+const URL_DA_API = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '')
+
 async function mensagemDeErro(resposta) {
   const corpo = await resposta.json().catch(() => null)
   const detalhe = corpo?.detail
@@ -11,7 +15,7 @@ async function mensagemDeErro(resposta) {
 async function requisitar(url, opcoes) {
   let resposta
   try {
-    resposta = await fetch(url, opcoes)
+    resposta = await fetch(URL_DA_API + url, opcoes)
   } catch {
     throw new Error('Não foi possível conectar ao servidor. Verifique se o backend está rodando.')
   }
@@ -36,4 +40,6 @@ export const esvaziarFila = () => requisitar('/api/notas?status=pendente', { met
 export const reprocessarNota = (id, abordagem) =>
   requisitar(`/api/notas/${id}/reprocessar${abordagem ? `?abordagem=${abordagem}` : ''}`, { method: 'POST' })
 
-export const urlDoPdf = (id) => `/api/notas/${id}/pdf`
+export const salvarNoBanco = (id) => requisitar(`/api/notas/${id}/salvar`, { method: 'POST' })
+
+export const urlDoPdf = (id) => `${URL_DA_API}/api/notas/${id}/pdf`

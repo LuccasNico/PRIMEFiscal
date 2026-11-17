@@ -8,10 +8,11 @@ import pytest
 
 # Ambiente isolado, definido antes de importar a aplicação (tem prioridade sobre o .env do desenvolvedor).
 # Os testes nunca chamam uma IA de verdade: o backend/.env não é lido e o LM Studio aponta para uma porta fechada.
+# Para rodar os testes num PostgreSQL, defina DATABASE_URL_TESTES com um banco descartável: ele é APAGADO a cada teste.
 _pasta = tempfile.mkdtemp()
 os.environ.update(
     {
-        "DATABASE_URL": f"sqlite:///{os.path.join(_pasta, 'teste.db')}",
+        "DATABASE_URL": os.getenv("DATABASE_URL_TESTES") or f"sqlite:///{os.path.join(_pasta, 'teste.db')}",
         "PASTA_UPLOADS": os.path.join(_pasta, "uploads"),
         "TAMANHO_MAXIMO_MB": "1",
         "ARQUIVO_ENV": os.path.join(_pasta, "nao-existe.env"),
@@ -22,7 +23,15 @@ os.environ.update(
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.db import NotaFiscalRegistro, SessaoLocal, criar_tabelas  # noqa: E402
+from app.db import (  # noqa: E402
+    ItemRegistro,
+    NotaFiscalRegistro,
+    NotaSalvaRegistro,
+    PagamentoRegistro,
+    ParticipanteRegistro,
+    SessaoLocal,
+    criar_tabelas,
+)
 from app.main import app  # noqa: E402
 from app.schemas.nota_fiscal import Metadados, NotaFiscalExtraida  # noqa: E402
 from app.services.validacao import validar_nota  # noqa: E402
@@ -40,7 +49,9 @@ NOTA_EXTRAIDA = {
 def limpar_banco() -> None:
     criar_tabelas()
     with SessaoLocal() as sessao:
-        sessao.query(NotaFiscalRegistro).delete()
+        # Das tabelas que dependem para as tabelas de que dependem
+        for modelo in (ItemRegistro, PagamentoRegistro, NotaSalvaRegistro, ParticipanteRegistro, NotaFiscalRegistro):
+            sessao.query(modelo).delete()
         sessao.commit()
 
 
