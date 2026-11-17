@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { urlDoPdf } from '../api.js'
+import { useEffect, useState } from 'react'
+import { baixarPdf } from '../api.js'
 import {
   chaveDeAcesso,
   cnpjOuCpf,
@@ -263,6 +263,53 @@ function SituacaoNoBanco({ banco }) {
   )
 }
 
+/**
+ * Endereço local (blob:) do PDF original. A API exige o token no cabeçalho, que um <iframe> não envia,
+ * então o PDF é baixado com fetch e mostrado a partir da memória do navegador.
+ */
+function usePdf(notaId) {
+  const [pdf, setPdf] = useState({ url: null, erro: null })
+
+  useEffect(() => {
+    let url = null
+    let cancelado = false
+    setPdf({ url: null, erro: null })
+    baixarPdf(notaId)
+      .then((arquivo) => {
+        if (cancelado) return
+        url = URL.createObjectURL(arquivo)
+        setPdf({ url, erro: null })
+      })
+      .catch((e) => !cancelado && setPdf({ url: null, erro: e.message }))
+    return () => {
+      cancelado = true
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [notaId])
+
+  return pdf
+}
+
+function VisualizadorPdf({ nota }) {
+  const pdf = usePdf(nota.id)
+  return (
+    <div className="visualizador-pdf">
+      {pdf.url ? (
+        <>
+          <iframe src={pdf.url} title={`PDF original: ${nota.arquivo}`} />
+          <a href={pdf.url} target="_blank" rel="noreferrer">
+            Abrir o PDF em outra aba
+          </a>
+        </>
+      ) : (
+        <p className="pdf-carregando" role={pdf.erro ? 'alert' : undefined}>
+          {pdf.erro ?? 'Carregando o PDF...'}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /** Dados de uma nota, com as ações disponíveis e o PDF original ao lado para conferência. */
 export default function DetalheNota({ nota, posicaoNaFila, aoReprocessar, aoRemover, aoSalvarNoBanco }) {
   const [mostrarPdf, setMostrarPdf] = useState(false)
@@ -328,14 +375,7 @@ export default function DetalheNota({ nota, posicaoNaFila, aoReprocessar, aoRemo
       )}
 
       <div className={mostrarPdf && nota.tem_pdf ? 'comparacao' : ''}>
-        {mostrarPdf && nota.tem_pdf && (
-          <div className="visualizador-pdf">
-            <iframe src={urlDoPdf(nota.id)} title={`PDF original: ${nota.arquivo}`} />
-            <a href={urlDoPdf(nota.id)} target="_blank" rel="noreferrer">
-              Abrir o PDF em outra aba
-            </a>
-          </div>
-        )}
+        {mostrarPdf && nota.tem_pdf && <VisualizadorPdf nota={nota} />}
 
         <div>
           {nota.status === 'pendente' && (

@@ -59,6 +59,14 @@ class Provedor(NamedTuple):
     pdf_exige_visao: bool  # na abordagem "pdf", o modelo precisa aceitar imagens
 
 
+class Modelo(NamedTuple):
+    """Um modelo que pode ser escolhido na interface."""
+
+    id: str  # o nome usado na API, ex.: gemini-3.5-flash
+    nome: str  # o nome para exibição, ex.: Gemini 3.5 Flash
+    descricao: str = ""
+
+
 def mensagem_com_texto(texto: str) -> str:
     return f"Texto extraído de uma nota fiscal em PDF:\n\n<documento>\n{texto}\n</documento>\n\n{INSTRUCAO_USUARIO}"
 

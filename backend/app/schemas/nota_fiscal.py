@@ -154,6 +154,7 @@ class NotaFiscalResposta(BaseModel):
     status: StatusNota
     lote_id: str | None = Field(None, description="Identifica as notas enviadas na mesma requisição")
     abordagem: str | None = None
+    modelo: str | None = Field(None, description="Modelo de IA escolhido no envio; nulo = o padrão do provedor")
     tem_pdf: bool = Field(False, description="Indica se o PDF original está guardado no servidor")
     criado_em: DataHoraUTC
     enfileirado_em: DataHoraUTC | None = None

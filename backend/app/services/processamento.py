@@ -27,11 +27,12 @@ def _texto_do_pdf(pdf_bytes: bytes) -> str:
 
 
 def processar_pdf(
-    pdf_bytes: bytes, abordagem: Abordagem = Abordagem.PDF
+    pdf_bytes: bytes, abordagem: Abordagem = Abordagem.PDF, modelo: str | None = None
 ) -> tuple[NotaFiscalExtraida, ResultadoValidacao, Metadados]:
+    """`modelo` vazio usa o modelo padrão do provedor."""
     if abordagem == Abordagem.TEXTO:
-        dados, metadados = ia.extrair_de_texto(_texto_do_pdf(pdf_bytes))
+        dados, metadados = ia.extrair_de_texto(_texto_do_pdf(pdf_bytes), modelo)
     else:
-        dados, metadados = ia.extrair_de_pdf(pdf_bytes)
+        dados, metadados = ia.extrair_de_pdf(pdf_bytes, modelo)
 
     return dados, validar_nota(dados), metadados

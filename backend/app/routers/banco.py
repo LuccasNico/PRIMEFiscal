@@ -6,10 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.acesso import exigir_acesso
 from app.db import NotaSalvaRegistro, ParticipanteRegistro, obter_sessao
 from app.schemas.nota_fiscal import NotaSalvaDetalhe, NotaSalvaResumo, TipoDocumento
 
-router = APIRouter(prefix="/api/banco/notas", tags=["banco de notas"])
+router = APIRouter(prefix="/api/banco/notas", tags=["banco de notas"], dependencies=[Depends(exigir_acesso)])
 
 
 def _buscar(nota_id: int, sessao: Session) -> NotaSalvaRegistro:

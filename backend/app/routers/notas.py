@@ -7,8 +7,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import armazenamento
+from app.acesso import exigir_acesso
 from app.config import configuracoes
 from app.db import NotaFiscalRegistro, agora, obter_sessao
+from app.routers.modelos import modelo_escolhido
 from app.schemas.nota_fiscal import (
     STATUS_NA_FILA,
     NotaFiscalExtraida,
@@ -21,7 +23,8 @@ from app.services.fila import fila
 from app.services.processamento import Abordagem
 from app.services.validacao import validar_nota
 
-router = APIRouter(prefix="/api/notas", tags=["notas"])
+# Todas as rotas exigem o token de acesso: as notas têm dados pessoais e o envio consome a IA
+router = APIRouter(prefix="/api/notas", tags=["notas"], dependencies=[Depends(exigir_acesso)])
 
 MAXIMO_DE_ARQUIVOS_POR_ENVIO = 50
 
@@ -54,6 +57,7 @@ def _buscar(nota_id: int, sessao: Session) -> NotaFiscalRegistro:
 async def enviar_notas(
     arquivos: list[UploadFile] = File(..., description="Um ou mais arquivos PDF"),
     abordagem: Abordagem = Query(Abordagem.PDF),
+    modelo: str | None = Depends(modelo_escolhido),
     sessao: Session = Depends(obter_sessao),
 ):
     """As notas entram na fila com status `pendente` e são processadas uma por vez.
@@ -71,6 +75,7 @@ async def enviar_notas(
             status=StatusNota.PENDENTE.value,
             lote_id=lote_id,
             abordagem=abordagem.value,
+            modelo=modelo,
             enfileirado_em=agora(),
         )
         for nome, _ in pdfs
@@ -162,8 +167,10 @@ def corrigir_nota(nota_id: int, dados: NotaFiscalExtraida, sessao: Session = Dep
 def reprocessar_nota(
     nota_id: int,
     abordagem: Abordagem | None = Query(None, description="Se omitida, repete a abordagem anterior"),
+    modelo: str | None = Depends(modelo_escolhido),
     sessao: Session = Depends(obter_sessao),
 ):
+    """Sem `modelo`, repete o modelo usado antes."""
     registro = _buscar(nota_id, sessao)
     if registro.status in STATUS_NA_FILA:
         raise HTTPException(409, "A nota já está na fila de processamento.")
@@ -171,6 +178,8 @@ def reprocessar_nota(
         raise HTTPException(409, "O PDF original desta nota não está disponível. Envie o arquivo novamente.")
     if abordagem is not None:
         registro.abordagem = abordagem.value
+    if modelo is not None:
+        registro.modelo = modelo
     registro.status = StatusNota.PENDENTE.value
     registro.enfileirado_em = agora()
     registro.iniciado_em = None

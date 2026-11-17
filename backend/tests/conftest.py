@@ -89,13 +89,15 @@ def ia_falsa(monkeypatch):
 
     - `liberar`: enquanto estiver desligado, o processamento fica parado (simula uma IA lenta);
     - `erros`: exceções lançadas nas próximas chamadas, na ordem (None = sucesso);
-    - `chamadas`: (pdf_bytes, abordagem) de cada nota processada.
+    - `chamadas`: (pdf_bytes, abordagem) de cada nota processada;
+    - `modelos`: o modelo pedido em cada nota processada (None = o padrão do provedor).
     """
-    controle = SimpleNamespace(liberar=threading.Event(), erros=[], chamadas=[])
+    controle = SimpleNamespace(liberar=threading.Event(), erros=[], chamadas=[], modelos=[])
     controle.liberar.set()
 
-    def processar_falso(pdf_bytes, abordagem):
+    def processar_falso(pdf_bytes, abordagem, modelo=None):
         controle.chamadas.append((pdf_bytes, abordagem))
+        controle.modelos.append(modelo)
         controle.liberar.wait(timeout=10)
         erro = controle.erros.pop(0) if controle.erros else None
         if erro is not None:
@@ -116,11 +118,11 @@ def cliente(ia_falsa):
         ia_falsa.liberar.set()  # não deixa a fila presa ao encerrar
 
 
-def aguardar(cliente, nota_id: int, *status: str, limite_segundos: float = 10) -> dict:
+def aguardar(cliente, nota_id: int, *status: str, limite_segundos: float = 10, headers: dict | None = None) -> dict:
     """Consulta a nota até ela chegar a um dos status esperados."""
     fim = time.monotonic() + limite_segundos
     while True:
-        nota = cliente.get(f"/api/notas/{nota_id}").json()
+        nota = cliente.get(f"/api/notas/{nota_id}", headers=headers).json()
         if nota["status"] in status:
             return nota
         if time.monotonic() > fim:

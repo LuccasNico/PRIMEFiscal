@@ -18,7 +18,9 @@ def test_saude(cliente):
         "provedor": "lmstudio",
         "nome_provedor": "LM Studio",
         "modelo": "primeiro modelo disponível",
+        "escolhe_modelo": False,
         "pdf_exige_visao": True,
+        "exige_senha": False,
         "tamanho_maximo_mb": 1,
         "maximo_de_arquivos_por_envio": 50,
     }

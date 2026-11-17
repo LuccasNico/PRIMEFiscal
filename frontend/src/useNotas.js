@@ -13,13 +13,21 @@ function ordemDaFila(a, b) {
   return (a.enfileirado_em ?? '').localeCompare(b.enfileirado_em ?? '') || a.id - b.id
 }
 
-/** Estado das notas no servidor (fila e notas concluídas) e as ações disponíveis sobre elas */
-export function useNotas() {
+/**
+ * Estado das notas no servidor (fila e notas concluídas) e as ações disponíveis sobre elas.
+ * `autenticado`: se a pessoa já digitou a senha de acesso (só importa quando o servidor exige senha).
+ */
+export function useNotas(autenticado) {
   const [notas, setNotas] = useState([])
   const [saude, setSaude] = useState(undefined) // undefined = verificando; null = backend fora do ar
   const [erro, setErro] = useState(null)
   const ultimaConsulta = useRef(0)
 
+  const verificando = saude === undefined
+  // Sem a senha, nada é consultado: a API recusaria e a interface fica atrás da tela de senha
+  const bloqueado = Boolean(saude?.exige_senha) && !autenticado
+
+  /** Busca a lista de notas. Retorna true se o servidor respondeu, mesmo que com erro. */
   const atualizar = useCallback(async () => {
     // Respostas podem chegar fora de ordem; só a consulta mais recente altera a tela
     const consulta = ++ultimaConsulta.current
@@ -27,8 +35,8 @@ export function useNotas() {
       const lista = await api.listarNotas()
       if (consulta === ultimaConsulta.current) setNotas(lista)
       return true
-    } catch {
-      return false
+    } catch (e) {
+      return e.status != null
     }
   }, [])
 
@@ -42,11 +50,22 @@ export function useNotas() {
 
   useEffect(() => {
     verificarSaude()
-    atualizar()
-  }, [verificarSaude, atualizar])
+  }, [verificarSaude])
+
+  // Ao entrar (ou quando não há senha), carrega as notas; ao sair, elas deixam a tela
+  useEffect(() => {
+    if (verificando) return
+    if (bloqueado) {
+      ultimaConsulta.current++ // descarta uma consulta que ainda esteja a caminho
+      setNotas([])
+    } else {
+      atualizar()
+    }
+  }, [verificando, bloqueado, atualizar])
 
   const temFila = notas.some(naFila)
   useEffect(() => {
+    if (bloqueado) return undefined
     const intervalo = setInterval(
       async () => {
         const respondeu = await atualizar()
@@ -56,7 +75,7 @@ export function useNotas() {
       temFila ? INTERVALO_COM_FILA_MS : INTERVALO_SEM_FILA_MS,
     )
     return () => clearInterval(intervalo)
-  }, [temFila, saude, atualizar, verificarSaude])
+  }, [temFila, saude, bloqueado, atualizar, verificarSaude])
 
   /** Executa uma ação no servidor, mostra o erro se houver e atualiza a lista. Retorna true se deu certo. */
   const executar = useCallback(
@@ -77,16 +96,19 @@ export function useNotas() {
 
   const maximoPorEnvio = saude?.maximo_de_arquivos_por_envio ?? MAXIMO_POR_ENVIO_PADRAO
 
-  /** Envia os arquivos para a fila. Retorna as notas criadas e quantos arquivos foram aceitos. */
+  /**
+   * Envia os arquivos para a fila. Retorna as notas criadas e quantos arquivos foram aceitos.
+   * Nas ações que usam a IA, `modelo` vazio deixa o backend usar o modelo padrão.
+   */
   const enviar = useCallback(
-    async (arquivos, abordagem) => {
+    async (arquivos, abordagem, modelo) => {
       const criadas = []
       let enviados = 0
       await executar(async () => {
         // O servidor limita a quantidade de arquivos por requisição
         for (let inicio = 0; inicio < arquivos.length; inicio += maximoPorEnvio) {
           const parte = arquivos.slice(inicio, inicio + maximoPorEnvio)
-          criadas.push(...(await api.enviarNotas(parte, abordagem)))
+          criadas.push(...(await api.enviarNotas(parte, abordagem, modelo)))
           enviados += parte.length
         }
       })
@@ -97,10 +119,13 @@ export function useNotas() {
 
   const remover = useCallback((id) => executar(() => api.removerNota(id)), [executar])
   const esvaziarFila = useCallback(() => executar(() => api.esvaziarFila()), [executar])
-  const reprocessar = useCallback((id, abordagem) => executar(() => api.reprocessarNota(id, abordagem)), [executar])
+  const reprocessar = useCallback(
+    (id, abordagem, modelo) => executar(() => api.reprocessarNota(id, abordagem, modelo)),
+    [executar],
+  )
   const salvarNoBanco = useCallback((id) => executar(() => api.salvarNoBanco(id)), [executar])
   const reprocessarVarias = useCallback(
-    (ids) => executar(() => Promise.all(ids.map((id) => api.reprocessarNota(id)))),
+    (ids, modelo) => executar(() => Promise.all(ids.map((id) => api.reprocessarNota(id, undefined, modelo)))),
     [executar],
   )
 
@@ -112,6 +137,7 @@ export function useNotas() {
     fila,
     concluidas,
     saude,
+    bloqueado,
     erro,
     dispensarErro: () => setErro(null),
     enviar,

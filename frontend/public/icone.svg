@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- PRIMEFiscal: uma nota fiscal (cupom com a borda serrilhada) e o brilho da IA -->
+  <defs>
+    <linearGradient id="fundo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4c8dff"/>
+      <stop offset="1" stop-color="#1550c8"/>
+    </linearGradient>
+    <linearGradient id="brilho" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe08a"/>
+      <stop offset="1" stop-color="#f5a524"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#fundo)"/>
+  <path d="M15 11h21l9 9v32l-3.75-3-3.75 3-3.75-3-3.75 3-3.75-3-3.75 3-3.75-3L15 52z" fill="#fff"/>
+  <path d="M36 11v6.5a2.5 2.5 0 0 0 2.5 2.5H45z" fill="#c9dbff"/>
+  <path d="M21 26h17M21 32h13M21 38h9" stroke="#7fa7f0" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M47 31c1 6.2 3.8 9 10 10-6.2 1-9 3.8-10 10-1-6.2-3.8-9-10-10 6.2-1 9-3.8 10-10z" fill="url(#brilho)" stroke="#1550c8" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M53 12c.45 2.6 1.4 3.55 4 4-2.6.45-3.55 1.4-4 4-.45-2.6-1.4-3.55-4-4 2.6-.45 3.55-1.4 4-4z" fill="#ffe08a"/>
+</svg>

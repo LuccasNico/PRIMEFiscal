@@ -57,9 +57,8 @@ def _origens(texto: str) -> list[str]:
 class Configuracoes:
     provedor_ia: str = _provedor_ia()
 
-    # Gemini API (Google), o provedor padrão
+    # Gemini API (Google), o provedor padrão. O modelo é escolhido na interface, entre os que a API lista.
     gemini_chave: str = valor_ambiente("GEMINI_API_KEY")
-    gemini_modelo: str = valor_ambiente("GEMINI_MODELO", "gemini-3.5-flash")
     gemini_timeout: float = float(valor_ambiente("GEMINI_TIMEOUT", "120"))
 
     # Claude API (Anthropic)
@@ -87,6 +86,10 @@ class Configuracoes:
         default_factory=lambda: _origens(valor_ambiente("CORS_ORIGINS", "http://localhost:5173"))
     )
     tamanho_maximo_bytes: int = int(valor_ambiente("TAMANHO_MAXIMO_MB", "20")) * 1024 * 1024
+
+    # Senha de acesso à API (veja app/acesso.py). Vazia = sem senha, só para uso local.
+    acesso_senha: str = valor_ambiente("ACESSO_SENHA")
+    acesso_validade_horas: float = float(valor_ambiente("ACESSO_VALIDADE_HORAS", "12"))
 
     def __post_init__(self) -> None:
         if self.provedor_ia not in PROVEDORES_IA:

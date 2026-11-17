@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS notas_fiscais (
     status          VARCHAR(20)  NOT NULL,
     lote_id         VARCHAR(36),
     abordagem       VARCHAR(10),
+    modelo          VARCHAR(100),
     tipo_documento  VARCHAR(20),
     criado_em       TIMESTAMPTZ  NOT NULL DEFAULT now(),
     enfileirado_em  TIMESTAMPTZ,
@@ -54,6 +55,7 @@ COMMENT ON TABLE  notas_fiscais           IS 'Área de trabalho: notas enviadas,
 COMMENT ON COLUMN notas_fiscais.status    IS 'pendente, processando, processada, revisar, revisada ou erro';
 COMMENT ON COLUMN notas_fiscais.lote_id   IS 'Identifica as notas enviadas na mesma requisição';
 COMMENT ON COLUMN notas_fiscais.abordagem IS 'pdf (leitura visual) ou texto (texto extraído do PDF)';
+COMMENT ON COLUMN notas_fiscais.modelo    IS 'Modelo de IA escolhido na interface; nulo = o padrão do provedor';
 COMMENT ON COLUMN notas_fiscais.dados     IS 'JSON extraído pela IA (ou corrigido pelo usuário)';
 
 -- -------------------------------------------------------------------------------------

@@ -85,6 +85,8 @@ class NotaFiscalRegistro(Base):
     status: Mapped[str] = mapped_column(String(20), index=True)
     lote_id: Mapped[str | None] = mapped_column(String(36), index=True)
     abordagem: Mapped[str | None] = mapped_column(String(10))
+    # Modelo escolhido na interface; vazio = o padrão do provedor
+    modelo: Mapped[str | None] = mapped_column(String(100))
     tipo_documento: Mapped[str | None] = mapped_column(String(20))
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=agora)
     # Ordem da fila: muda quando a nota é reprocessada, para ela voltar ao fim

@@ -27,12 +27,20 @@ O provedor é escolhido em `PROVEDOR_IA`, no arquivo `backend/.env`. Só o bloco
 | `lmstudio` | Modelo local no [LM Studio](https://lmstudio.ai/) | Não | Gratuito e os dados não saem do computador. Veja abaixo. |
 | `compativel` | Qualquer API no padrão da OpenAI: OpenAI, Groq, OpenRouter, Ollama, vLLM etc. | Não | Informe nome, URL (terminando em `/v1`), chave e modelo. |
 
+**Escolha do modelo (Gemini):** a lista suspensa no topo da interface traz os modelos que a API do Google oferece para a chave configurada (consultada pelo backend e guardada por 10 minutos). O modelo escolhido vale para os próximos envios e reprocessamentos e fica registrado em cada nota. Sem escolha, é usado o `gemini-3.5-flash`.
+
 **Abordagens de leitura**, escolhidas no envio de cada nota:
 
 - **Texto do PDF:** o texto embutido no PDF é extraído (os quadros do DANFE viram pares "rótulo / valor") e enviado ao modelo. Mais rápido e funciona com qualquer modelo, mas não serve para notas escaneadas.
 - **Leitura visual do PDF:** o modelo vê a página. Gemini e Claude recebem o próprio PDF; nos demais provedores as páginas vão como imagens, e o modelo precisa ter visão.
 
-Para usar um serviço com protocolo próprio, crie um módulo em `backend/app/services/ia/` com as funções `extrair_de_pdf`, `extrair_de_texto` e `descrever`, e registre-o em `backend/app/services/ia/__init__.py`.
+Para usar um serviço com protocolo próprio, crie um módulo em `backend/app/services/ia/` com as funções `extrair_de_pdf`, `extrair_de_texto` e `descrever`, e registre-o em `backend/app/services/ia/__init__.py`. Se o módulo também tiver `listar_modelos`, a interface passa a oferecer a escolha do modelo.
+
+## Senha de acesso
+
+Quando `ACESSO_SENHA` está definida, todas as rotas da API exigem um token, menos `GET /api/saude` (usada pela interface antes do login e pelo health check do Render) e `POST /api/acesso`. Assim, quem descobrir o endereço da API não lê nem apaga as notas (que têm CNPJ, CPF e endereços) nem gasta a cota de IA. A interface pede a senha uma vez, troca-a por um token em `POST /api/acesso` e o envia como `Authorization: Bearer <token>`. O token vale `ACESSO_VALIDADE_HORAS` (padrão: 12 h), é assinado com uma chave derivada da senha (trocar a senha invalida todos os tokens) e continua valendo se o servidor reiniciar. Cada senha errada demora 1 segundo para ser respondida. O PDF original é baixado pela interface com o token e exibido a partir da memória do navegador, já que um `<iframe>` não envia o cabeçalho.
+
+Um token fixo embutido no frontend não serviria: ele fica visível no JavaScript publicado. Sem `ACESSO_SENHA` não há verificação, o que só convém no uso local; no deploy, defina sempre uma senha longa.
 
 ## Como rodar
 
@@ -123,6 +131,7 @@ Crie os três recursos no painel do Render, na **mesma região** (assim a API e 
      | `PYTHON_VERSION` | `3.13.5` |
      | `DATABASE_URL` | a Internal Database URL do passo 1 |
      | `GEMINI_API_KEY` | a chave do Gemini |
+     | `ACESSO_SENHA` | a senha que a interface vai pedir (longa; sem ela, qualquer um vê as notas e usa a sua cota de IA) |
      | `CORS_ORIGINS` | a URL do frontend (passo 3), ex.: `https://primefiscal.onrender.com` |
      | `PASTA_UPLOADS` | `/tmp/primefiscal-uploads` |
 
@@ -142,19 +151,23 @@ Limites do plano gratuito: a API dorme após 15 minutos sem uso (o primeiro aces
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/api/saude` | Situação da API, provedor de IA em uso e limites de envio |
-| POST | `/api/notas` | Envia um ou mais PDFs para a fila (parâmetro `abordagem`: `texto` ou `pdf`) |
+| GET | `/api/saude` | Situação da API, provedor de IA em uso, se exige senha e limites de envio |
+| POST | `/api/acesso` | Troca a senha de acesso por um token |
+| GET | `/api/modelos` | Modelos que podem ser escolhidos (hoje, só no Gemini) e o padrão |
+| POST | `/api/notas` | Envia um ou mais PDFs para a fila (parâmetros `abordagem`: `texto` ou `pdf`; `modelo`, opcional) |
 | GET | `/api/notas` | Lista as notas (filtros opcionais `status` e `lote_id`) |
 | DELETE | `/api/notas?status=...` | Remove todas as notas com a situação informada (`pendente` esvazia a fila) |
 | GET | `/api/notas/{id}` | Dados completos de uma nota |
 | GET | `/api/notas/{id}/pdf` | PDF original |
 | PUT | `/api/notas/{id}` | Correção manual dos dados (a nota é validada de novo) |
-| POST | `/api/notas/{id}/reprocessar` | Devolve a nota à fila para uma nova extração |
+| POST | `/api/notas/{id}/reprocessar` | Devolve a nota à fila para uma nova extração (`abordagem` e `modelo` opcionais) |
 | POST | `/api/notas/{id}/salvar` | Salva a nota no banco de notas (ou atualiza a cópia já salva) |
 | DELETE | `/api/notas/{id}` | Remove a nota (ou a retira da fila) e apaga o PDF; a cópia no banco de notas continua |
 | GET | `/api/banco/notas` | Lista as notas salvas (filtros opcionais `tipo_documento`, `documento_emitente`, `emitida_de`, `emitida_ate`) |
 | GET | `/api/banco/notas/{id}` | Nota salva, com o JSON extraído |
 | DELETE | `/api/banco/notas/{id}` | Remove a nota do banco de notas |
+
+Com `ACESSO_SENHA` definida, todas as rotas, menos `/api/saude` e `/api/acesso`, exigem `Authorization: Bearer <token>` (veja [Senha de acesso](#senha-de-acesso)).
 
 ## Privacidade
 

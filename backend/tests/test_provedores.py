@@ -202,8 +202,9 @@ def resposta_gemini(conteudo: str, finish_reason: str = "STOP") -> httpx.Respons
 def config_gemini(monkeypatch):
     def configurar(chave="chave-gemini"):
         monkeypatch.setattr(
-            gemini, "configuracoes", SimpleNamespace(gemini_chave=chave, gemini_modelo="gemini-teste", gemini_timeout=30)
+            gemini, "configuracoes", SimpleNamespace(gemini_chave=chave, gemini_timeout=30)
         )
+        monkeypatch.setattr(gemini, "_lista_guardada", None)
 
     configurar()
     return configurar
@@ -211,7 +212,7 @@ def config_gemini(monkeypatch):
 
 def test_gemini_extrai_com_schema(api_falsa, config_gemini):
     recebidas = api_falsa(resposta_gemini(json.dumps(NOTA_EXTRAIDA)))
-    dados, metadados = gemini.extrair_de_texto("texto da nota")
+    dados, metadados = gemini.extrair_de_texto("texto da nota", modelo="gemini-teste")
 
     _, url, parametros = recebidas[0]
     assert url.endswith("/models/gemini-teste:generateContent")
@@ -229,6 +230,60 @@ def test_gemini_recebe_o_pdf_direto(api_falsa, config_gemini):
     documento = recebidas[0][2]["json"]["contents"][0]["parts"][0]["inlineData"]
     assert documento["mimeType"] == "application/pdf"
     assert base64.b64decode(documento["data"]) == pdf
+
+
+def test_gemini_sem_modelo_escolhido_usa_o_padrao(api_falsa, config_gemini):
+    recebidas = api_falsa(resposta_gemini(json.dumps(NOTA_EXTRAIDA)))
+    gemini.extrair_de_texto("texto da nota")
+    assert recebidas[0][1].endswith(f"/models/{gemini.MODELO_PADRAO}:generateContent")
+
+
+def modelo_da_api(nome: str, metodos=("generateContent", "countTokens"), titulo: str | None = None) -> dict:
+    return {"name": f"models/{nome}", "displayName": titulo or nome.upper(), "supportedGenerationMethods": list(metodos)}
+
+
+def test_gemini_lista_so_modelos_de_texto_dos_mais_novos_para_os_mais_antigos(api_falsa, config_gemini):
+    recebidas = api_falsa(
+        httpx.Response(
+            200,
+            json={
+                "models": [
+                    modelo_da_api("gemini-2.5-flash", titulo="Gemini 2.5 Flash"),
+                    modelo_da_api("gemini-flash-latest"),
+                    modelo_da_api("gemini-3.5-flash-preview-tts"),
+                    modelo_da_api("gemini-3.5-transcribe"),
+                    modelo_da_api("gemini-nano-banana-2.1"),
+                    modelo_da_api("gemini-embedding-001", metodos=("embedContent",)),
+                    modelo_da_api("gemma-3-27b-it"),
+                ],
+                "nextPageToken": "pagina-2",
+            },
+        ),
+        httpx.Response(200, json={"models": [modelo_da_api("gemini-3.5-flash"), modelo_da_api("gemini-3.5-flash-image")]}),
+    )
+    modelos = gemini.listar_modelos()
+
+    assert [modelo.id for modelo in modelos] == ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-flash-latest"]
+    assert modelos[1].nome == "Gemini 2.5 Flash"
+    assert recebidas[0][2]["headers"]["x-goog-api-key"] == "chave-gemini"
+    assert recebidas[1][2]["params"]["pageToken"] == "pagina-2"
+
+
+def test_gemini_guarda_a_lista_de_modelos(api_falsa, config_gemini):
+    recebidas = api_falsa(httpx.Response(200, json={"models": [modelo_da_api("gemini-3.5-flash")]}))
+    assert gemini.listar_modelos() == gemini.listar_modelos()
+    assert len(recebidas) == 1
+
+
+def test_gemini_lista_vazia_e_falhas_na_listagem(api_falsa, config_gemini):
+    api_falsa(httpx.Response(200, json={"models": []}), httpx.Response(400, json={"error": {"message": "API key not valid"}}))
+    with pytest.raises(ErroExtracao, match="nenhum modelo"):
+        gemini.listar_modelos()
+    with pytest.raises(ErroExtracao, match="API key not valid"):
+        gemini.listar_modelos()
+    config_gemini(chave="")
+    with pytest.raises(ErroExtracao, match="GEMINI_API_KEY"):
+        gemini.listar_modelos()
 
 
 def test_gemini_exige_chave(config_gemini):

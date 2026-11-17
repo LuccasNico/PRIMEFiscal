@@ -87,9 +87,10 @@ class FilaDeProcessamento:
             sessao.commit()
             nota_id = registro.id
             abordagem = Abordagem(registro.abordagem or Abordagem.PDF.value)
+            modelo = registro.modelo
 
         # A chamada à IA pode levar minutos: nenhuma sessão do banco fica aberta enquanto isso
-        resultado, erro = self._extrair(nota_id, abordagem)
+        resultado, erro = self._extrair(nota_id, abordagem, modelo)
 
         with SessaoLocal() as sessao:
             registro = sessao.get(NotaFiscalRegistro, nota_id)
@@ -108,13 +109,15 @@ class FilaDeProcessamento:
             sessao.commit()
         return True
 
-    def _extrair(self, nota_id: int, abordagem: Abordagem) -> tuple[Resultado | None, str | None]:
+    def _extrair(
+        self, nota_id: int, abordagem: Abordagem, modelo: str | None
+    ) -> tuple[Resultado | None, str | None]:
         try:
             pdf_bytes = armazenamento.ler_pdf(nota_id)
         except FileNotFoundError:
             return None, "O PDF original não está mais disponível no servidor. Envie o arquivo novamente."
         try:
-            return processar_pdf(pdf_bytes, abordagem), None
+            return processar_pdf(pdf_bytes, abordagem, modelo), None
         except ErroExtracao as e:
             return None, str(e)
         except Exception:
