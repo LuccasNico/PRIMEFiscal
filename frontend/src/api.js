@@ -15,7 +15,7 @@ async function mensagemDeErro(resposta) {
 async function requisitar(url, opcoes) {
   let resposta
   try {
-    resposta = await fetch(URL_DA_API + url, opcoes)
+    resposta = await fetch(URL_DA_API)
   } catch {
     throw new Error('Não foi possível conectar ao servidor. Verifique se o backend está rodando.')
   }
