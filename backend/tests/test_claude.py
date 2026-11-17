@@ -35,7 +35,7 @@ def api(monkeypatch):
 
         cliente = SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(parse=parse)))
         monkeypatch.setattr(claude, "_cliente", lambda: cliente)
-        monkeypatch.setattr(claude, "configuracoes", SimpleNamespace(modelo_claude=modelo))
+        monkeypatch.setattr(claude, "configuracoes", SimpleNamespace(claude_modelo=modelo, claude_chave=""))
         return recebidos
 
     return configurar
@@ -80,12 +80,12 @@ def test_fallback_so_e_enviado_para_modelos_que_aceitam(api):
 @pytest.mark.parametrize(
     "erro, trecho",
     [
-        (erro_http(anthropic.AuthenticationError, 401), "Chave da Claude API inválida"),
+        (erro_http(anthropic.AuthenticationError, 401), "Chave de API do Claude (Anthropic) inválida"),
         (erro_http(anthropic.NotFoundError, 404), "não encontrado"),
-        (erro_http(anthropic.RateLimitError, 429), "Limite de requisições"),
-        (erro_http(anthropic.InternalServerError, 500), "Erro na Claude API (500)"),
-        (anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.anthropic.com")), "Falha de conexão"),
-        (TypeError("Could not resolve authentication method"), "Credenciais da Claude API não encontradas"),
+        (erro_http(anthropic.RateLimitError, 429), "limite de uso do Claude"),
+        (erro_http(anthropic.InternalServerError, 500), "Claude (Anthropic) respondeu com erro 500"),
+        (anthropic.APIConnectionError(request=httpx2.Request("POST", "https://api.anthropic.com")), "Não foi possível conectar ao serviço Claude"),
+        (TypeError("Could not resolve authentication method"), "Chave de API do Claude (Anthropic) não encontrada"),
     ],
 )
 def test_falhas_da_api_viram_mensagens_claras(api, erro, trecho):

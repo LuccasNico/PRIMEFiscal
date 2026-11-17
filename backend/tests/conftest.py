@@ -7,18 +7,16 @@ from types import SimpleNamespace
 import pytest
 
 # Ambiente isolado, definido antes de importar a aplicação (tem prioridade sobre o .env do desenvolvedor).
-# Os testes nunca chamam uma IA de verdade: sem chave do Claude e com o LM Studio apontando para uma porta fechada.
+# Os testes nunca chamam uma IA de verdade: o backend/.env não é lido e o LM Studio aponta para uma porta fechada.
 _pasta = tempfile.mkdtemp()
 os.environ.update(
     {
         "DATABASE_URL": f"sqlite:///{os.path.join(_pasta, 'teste.db')}",
         "PASTA_UPLOADS": os.path.join(_pasta, "uploads"),
         "TAMANHO_MAXIMO_MB": "1",
+        "ARQUIVO_ENV": os.path.join(_pasta, "nao-existe.env"),
         "PROVEDOR_IA": "lmstudio",
         "LMSTUDIO_URL": "http://127.0.0.1:9/v1",
-        "LMSTUDIO_MODELO": "",
-        "MODELO_CLAUDE": "claude-opus-5-5",
-        "ANTHROPIC_API_KEY": "",
     }
 )
 
@@ -44,6 +42,34 @@ def limpar_banco() -> None:
     with SessaoLocal() as sessao:
         sessao.query(NotaFiscalRegistro).delete()
         sessao.commit()
+
+
+@pytest.fixture
+def api_falsa(monkeypatch):
+    """Troca as requisições HTTP dos provedores por respostas definidas no teste.
+
+    Uso: `recebidas = api_falsa(resposta1, resposta2, ...)`. Cada item é um `httpx.Response`
+    ou uma exceção a ser lançada. `recebidas` guarda (método, url, parâmetros) de cada chamada.
+    """
+    import httpx
+
+    recebidas = []
+
+    def configurar(*respostas):
+        fila_de_respostas = list(respostas)
+
+        def requisicao_falsa(metodo, url, **parametros):
+            recebidas.append((metodo, url, parametros))
+            resposta = fila_de_respostas.pop(0)
+            if isinstance(resposta, Exception):
+                raise resposta
+            resposta.request = httpx.Request(metodo, url)
+            return resposta
+
+        monkeypatch.setattr("app.services.ia.http.httpx.request", requisicao_falsa)
+        return recebidas
+
+    return configurar
 
 
 @pytest.fixture

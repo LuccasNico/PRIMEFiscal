@@ -15,16 +15,16 @@ function Cabecalho({ saude }) {
       </div>
       {saude && (
         <p className="provedor">
-          IA: <strong>{saude.provedor === 'lmstudio' ? 'LM Studio (local)' : saude.provedor === 'claude' ? 'Claude API' : saude.nome_provedor}</strong>
+          IA: <strong>{saude.nome_provedor}</strong>
           <br />
           {saude.modelo}
         </p>
       )}
       {saude === null && (
         <p className="provedor erro" role="alert">
-          Backend fora do ar
+          Servidor fora do ar
           <br />
-          http://localhost:8000
+          Inicie o backend (porta 8000)
         </p>
       )}
     </header>
@@ -55,7 +55,7 @@ export default function App() {
           <AreaUpload
             aoEnviar={aoEnviar}
             tamanhoMaximoMb={saude?.tamanho_maximo_mb}
-            requerModeloVisao={saude?.requer_modelo_visao_pdf}
+            pdfExigeVisao={saude?.pdf_exige_visao}
           />
 
           {erro && (

@@ -6,7 +6,7 @@ const ehPdf = (arquivo) => arquivo.type === 'application/pdf' || arquivo.name.to
 const chave = (arquivo) => `${arquivo.name}-${arquivo.size}`
 
 /** Escolha dos arquivos: eles ficam em uma lista de conferência e só vão para a fila quando a pessoa confirma. */
-export default function AreaUpload({ aoEnviar, tamanhoMaximoMb, requerModeloVisao }) {
+export default function AreaUpload({ aoEnviar, tamanhoMaximoMb, pdfExigeVisao }) {
   const [arquivos, setArquivos] = useState([])
   const [abordagem, setAbordagem] = useState('texto')
   const [arrastando, setArrastando] = useState(false)
@@ -118,11 +118,11 @@ export default function AreaUpload({ aoEnviar, tamanhoMaximoMb, requerModeloVisa
       )}
 
       <label className="campo">
-        Abordagem de extração
+        Como a IA deve ler a nota
         <select value={abordagem} onChange={(evento) => setAbordagem(evento.target.value)} disabled={enviando}>
-          <option value="texto">{ROTULOS_ABORDAGEM.texto} (mais rápido)</option>
+          <option value="texto">{ROTULOS_ABORDAGEM.texto} (mais rápido, exige PDF com texto)</option>
           <option value="pdf">
-            {ROTULOS_ABORDAGEM.pdf} ({requerModeloVisao ? 'exige modelo com visão' : 'lê também notas escaneadas'})
+            {ROTULOS_ABORDAGEM.pdf} ({pdfExigeVisao ? 'exige modelo com visão' : 'funciona com notas escaneadas'})
           </option>
         </select>
       </label>

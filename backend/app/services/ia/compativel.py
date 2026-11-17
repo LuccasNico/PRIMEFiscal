@@ -1,107 +1,136 @@
-"""Provedor para APIs compatíveis com OpenAI Chat Completions.
+"""Provedor para APIs no padrão Chat Completions da OpenAI.
 
-Configure URL, chave e modelo em ``API_COMPATIVEL_*``.  O mesmo adaptador atende
-OpenAI, Ollama, Groq, OpenRouter, Together, vLLM e outros serviços que expõem
-``/v1/chat/completions``. Para APIs com protocolo próprio, é necessário um
-adaptador específico.
+O mesmo código atende OpenAI, Groq, OpenRouter, Together, Ollama, vLLM e qualquer outro serviço
+com a rota ``/chat/completions`` (configurado em ``API_COMPATIVEL_*``). O provedor LM Studio
+também usa este módulo. APIs com protocolo próprio precisam de um módulo específico.
+
+Esses modelos não leem PDF: na abordagem "pdf", as páginas vão como imagens.
 """
 
-import json
 import time
-
-import httpx
-from pydantic import ValidationError
+from dataclasses import dataclass
 
 from app.config import configuracoes
-from app.schemas.nota_fiscal import Metadados, NotaFiscalExtraida
-from app.services.ia.base import INSTRUCAO_USUARIO, PROMPT_SISTEMA, ErroExtracao, mensagem_com_texto
-from app.services.ia.lmstudio import SCHEMA_NOTA, _paginas_como_imagens
+from app.schemas.nota_fiscal import Metadados
+from app.services.ia import http
+from app.services.ia.base import (
+    INSTRUCAO_DE_FORMATO,
+    INSTRUCAO_USUARIO,
+    PROMPT_SISTEMA,
+    SCHEMA_NOTA,
+    ErroExtracao,
+    Extracao,
+    Provedor,
+    interpretar_resposta,
+    mensagem_com_texto,
+    paginas_como_imagens,
+)
+
+DICA_SEM_VISAO = "A abordagem 'pdf' exige um modelo com visão; se não for o caso, use a abordagem 'texto'."
 
 
-def _extrair_json(texto: str) -> NotaFiscalExtraida:
-    """Aceita JSON puro e a forma mais comum de resposta em bloco Markdown."""
-    texto = (texto or "").strip()
-    if texto.startswith("```"):
-        texto = texto.split("\n", 1)[-1]
-        texto = texto.rsplit("```", 1)[0].strip()
-    try:
-        return NotaFiscalExtraida.model_validate_json(texto)
-    except ValidationError as e:
-        raise ErroExtracao(f"A API devolveu um JSON fora do formato esperado: {e.error_count()} erro(s).") from e
+@dataclass(frozen=True)
+class Servico:
+    """Um serviço no padrão da OpenAI e as dicas mostradas quando ele falha."""
+
+    nome: str
+    url: str
+    modelo: str
+    timeout: float
+    chave: str = ""
+    formato_resposta: str = "json_schema"
+    dica_conexao: str = ""
+    dica_demora: str = ""
+    dica_resposta_cortada: str = "Aumente o limite de tokens de saída do modelo."
 
 
-def _extrair(conteudo: str | list[dict], abordagem: str) -> tuple[NotaFiscalExtraida, Metadados]:
-    inicio = time.perf_counter()
-    formato = configuracoes.compativel_formato_resposta
-    corpo: dict = {
-        "model": configuracoes.compativel_modelo,
-        "temperature": 0,
-        "messages": [
-            {"role": "system", "content": PROMPT_SISTEMA},
-            {"role": "user", "content": conteudo},
-        ],
-    }
+def _formato_da_resposta(formato: str) -> dict:
+    """Como a API deve restringir a resposta. No formato "prompt" não há restrição: vale o pedido do prompt."""
     if formato == "json_schema":
-        corpo["response_format"] = {
-            "type": "json_schema",
-            "json_schema": {"name": "nota_fiscal", "strict": True, "schema": SCHEMA_NOTA},
-        }
-    elif formato == "json_object":
-        corpo["response_format"] = {"type": "json_object"}
-    else:
-        corpo["messages"][0]["content"] += "\nResponda apenas com um JSON válido conforme o schema solicitado."
+        esquema = {"name": "nota_fiscal", "strict": True, "schema": SCHEMA_NOTA}
+        return {"response_format": {"type": "json_schema", "json_schema": esquema}}
+    if formato == "json_object":
+        return {"response_format": {"type": "json_object"}}
+    return {}
 
-    cabecalhos = {"Content-Type": "application/json"}
-    if configuracoes.compativel_chave:
-        cabecalhos["Authorization"] = f"Bearer {configuracoes.compativel_chave}"
+
+def extrair(servico: Servico, conteudo: str | list[dict], abordagem: str) -> Extracao:
+    # Só o formato json_schema leva o schema na requisição; nos outros, ele vai escrito no prompt
+    prompt = PROMPT_SISTEMA
+    if servico.formato_resposta != "json_schema":
+        prompt += "\n\n" + INSTRUCAO_DE_FORMATO
+
+    inicio = time.perf_counter()
+    corpo = http.requisitar(
+        "POST",
+        f"{servico.url}/chat/completions",
+        nome=servico.nome,
+        timeout=servico.timeout,
+        dica_conexao=servico.dica_conexao,
+        dica_demora=servico.dica_demora,
+        dica_erro=DICA_SEM_VISAO if abordagem == "pdf" else "",
+        headers={"Authorization": f"Bearer {servico.chave}"} if servico.chave else {},
+        json={
+            "model": servico.modelo,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": conteudo},
+            ],
+            **_formato_da_resposta(servico.formato_resposta),
+        },
+    )
+    tempo_ms = int((time.perf_counter() - inicio) * 1000)
 
     try:
-        resposta = httpx.post(
-            f"{configuracoes.compativel_url}/chat/completions",
-            json=corpo,
-            headers=cabecalhos,
-            timeout=configuracoes.compativel_timeout,
-        )
-    except httpx.ConnectError as e:
-        raise ErroExtracao(f"Não foi possível conectar a {configuracoes.compativel_nome} em {configuracoes.compativel_url}.") from e
-    except httpx.TimeoutException as e:
-        raise ErroExtracao(f"{configuracoes.compativel_nome} demorou demais para responder.") from e
-    except httpx.HTTPError as e:
-        raise ErroExtracao(f"Falha na comunicação com {configuracoes.compativel_nome}: {e}") from e
-
-    if resposta.status_code >= 400:
-        detalhe = resposta.text[:500]
-        if abordagem == "pdf":
-            detalhe += " (a abordagem 'pdf' exige um modelo com visão)"
-        raise ErroExtracao(f"Erro em {configuracoes.compativel_nome} ({resposta.status_code}): {detalhe}")
-
-    try:
-        retorno = resposta.json()
-        escolha = retorno["choices"][0]
+        escolha = corpo["choices"][0]
         texto = escolha["message"]["content"]
-    except (ValueError, KeyError, IndexError, TypeError) as e:
-        raise ErroExtracao(f"{configuracoes.compativel_nome} devolveu uma resposta em formato inesperado.") from e
+    except (KeyError, IndexError, TypeError) as e:
+        raise ErroExtracao(f"{servico.nome} devolveu uma resposta em formato inesperado.") from e
     if escolha.get("finish_reason") == "length":
-        raise ErroExtracao("A resposta foi cortada por limite de tokens. Aumente o limite de saída do modelo.")
+        raise ErroExtracao(
+            f"A resposta de {servico.nome} foi cortada pelo limite de tokens. {servico.dica_resposta_cortada}"
+        )
 
-    dados = _extrair_json(texto)
-    uso = retorno.get("usage") or {}
-    return dados, Metadados(
+    uso = corpo.get("usage") or {}
+    metadados = Metadados(
         abordagem=abordagem,
-        modelo=f"{configuracoes.provedor_ia}/{retorno.get('model', configuracoes.compativel_modelo)}",
+        provedor=servico.nome,
+        modelo=corpo.get("model") or servico.modelo,
         tokens_entrada=uso.get("prompt_tokens"),
         tokens_saida=uso.get("completion_tokens"),
-        tempo_ms=int((time.perf_counter() - inicio) * 1000),
+        tempo_ms=tempo_ms,
+    )
+    return interpretar_resposta(texto, servico.nome), metadados
+
+
+def conteudo_com_imagens(pdf_bytes: bytes) -> list[dict]:
+    """Mensagem do usuário com as páginas do PDF como imagens."""
+    return [{"type": "text", "text": INSTRUCAO_USUARIO}] + [
+        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{imagem}"}}
+        for imagem in paginas_como_imagens(pdf_bytes)
+    ]
+
+
+def _servico() -> Servico:
+    return Servico(
+        nome=configuracoes.compativel_nome,
+        url=configuracoes.compativel_url,
+        modelo=configuracoes.compativel_modelo,
+        timeout=configuracoes.compativel_timeout,
+        chave=configuracoes.compativel_chave,
+        formato_resposta=configuracoes.compativel_formato_resposta,
+        dica_conexao=f"Confira API_COMPATIVEL_URL em backend/.env ({configuracoes.compativel_url}).",
     )
 
 
-def extrair_de_pdf(pdf_bytes: bytes) -> tuple[NotaFiscalExtraida, Metadados]:
-    conteudo = [{"type": "text", "text": INSTRUCAO_USUARIO}] + [
-        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{imagem}"}}
-        for imagem in _paginas_como_imagens(pdf_bytes)
-    ]
-    return _extrair(conteudo, abordagem="pdf")
+def descrever() -> Provedor:
+    return Provedor(nome=configuracoes.compativel_nome, modelo=configuracoes.compativel_modelo, pdf_exige_visao=True)
 
 
-def extrair_de_texto(texto: str) -> tuple[NotaFiscalExtraida, Metadados]:
-    return _extrair(mensagem_com_texto(texto), abordagem="texto")
+def extrair_de_pdf(pdf_bytes: bytes) -> Extracao:
+    return extrair(_servico(), conteudo_com_imagens(pdf_bytes), abordagem="pdf")
+
+
+def extrair_de_texto(texto: str) -> Extracao:
+    return extrair(_servico(), mensagem_com_texto(texto), abordagem="texto")

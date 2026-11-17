@@ -4,7 +4,7 @@ async function mensagemDeErro(resposta) {
   if (typeof detalhe === 'string') return detalhe
   // Erros de validação do FastAPI chegam como lista
   if (Array.isArray(detalhe)) return detalhe.map((item) => item.msg).join('; ')
-  if (resposta.status >= 500) return 'O servidor não respondeu. Verifique se o backend está rodando.'
+  if (resposta.status >= 500) return 'Erro interno no servidor. Veja os detalhes no terminal do backend.'
   return `Erro ${resposta.status}`
 }
 
@@ -13,7 +13,7 @@ async function requisitar(url, opcoes) {
   try {
     resposta = await fetch(url, opcoes)
   } catch {
-    throw new Error('Não foi possível falar com o servidor. Verifique se o backend está rodando.')
+    throw new Error('Não foi possível conectar ao servidor. Verifique se o backend está rodando.')
   }
   if (!resposta.ok) throw new Error(await mensagemDeErro(resposta))
   return resposta.status === 204 ? null : resposta.json()

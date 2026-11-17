@@ -1,15 +1,15 @@
 export const ROTULOS_STATUS = {
   pendente: 'Aguardando',
   processando: 'Processando',
-  processada: 'OK',
+  processada: 'Concluída',
   revisar: 'Revisar',
-  revisada: 'Revisada',
+  revisada: 'Corrigida',
   erro: 'Erro',
 }
 
 export const ROTULOS_ABORDAGEM = {
-  texto: 'Texto extraído do PDF',
-  pdf: 'PDF/imagem da página',
+  texto: 'Texto do PDF',
+  pdf: 'Leitura visual do PDF',
 }
 
 export const naFila = (nota) => nota.status === 'pendente' || nota.status === 'processando'

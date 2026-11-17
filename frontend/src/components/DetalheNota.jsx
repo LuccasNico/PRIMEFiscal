@@ -192,10 +192,10 @@ function DadosExtraidos({ nota }) {
 
       {metadados && (
         <p className="metadados">
-          {metadados.modelo} · abordagem: {ROTULOS_ABORDAGEM[metadados.abordagem] ?? metadados.abordagem} ·{' '}
-          {(metadados.tempo_ms / 1000).toFixed(1)} s
+          Extraído por {[metadados.provedor, metadados.modelo].filter(Boolean).join(' · ')} ·{' '}
+          {ROTULOS_ABORDAGEM[metadados.abordagem] ?? metadados.abordagem} · {(metadados.tempo_ms / 1000).toFixed(1)} s
           {metadados.tokens_entrada != null &&
-            ` · ${metadados.tokens_entrada} tokens de entrada / ${metadados.tokens_saida ?? '?'} de saída`}
+            ` · ${metadados.tokens_entrada} tokens de entrada, ${metadados.tokens_saida ?? '?'} de saída`}
         </p>
       )}
 
@@ -252,7 +252,7 @@ export default function DetalheNota({ nota, posicaoNaFila, aoReprocessar, aoRemo
 
       {nota.tem_pdf && !emFila && (
         <div className="reprocessar">
-          <label htmlFor="abordagem-reprocessar">Extrair de novo usando</label>
+          <label htmlFor="abordagem-reprocessar">Reprocessar com</label>
           <select id="abordagem-reprocessar" value={abordagem} onChange={(evento) => setAbordagem(evento.target.value)}>
             <option value="texto">{ROTULOS_ABORDAGEM.texto}</option>
             <option value="pdf">{ROTULOS_ABORDAGEM.pdf}</option>

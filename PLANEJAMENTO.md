@@ -33,8 +33,9 @@ Número, série, chave de acesso, data de emissão, emitente (razão social, CNP
 
 ```
              ┌──────────────────────── Backend (FastAPI) ─────────────────────────┐
- React  ───► │ Upload ─► [Abordagem PDF]   PDF direto no Claude (multimodal)      │
- (Vite)      │        └► [Abordagem Texto] pdfplumber ─► texto ─► Claude          │
+ React  ───► │ Upload ─► Fila (uma nota por vez, PDF guardado em disco)           │
+ (Vite)      │   ├► [Leitura visual] PDF (ou imagens das páginas) ─► IA           │
+             │   └► [Texto do PDF]   pdfplumber ─► "rótulo / valor" ─► IA         │
              │                              │                                     │
              │                    Saída estruturada (schema Pydantic)             │
              │                              ▼                                     │
@@ -48,33 +49,45 @@ Número, série, chave de acesso, data de emissão, emitente (razão social, CNP
 
 | Etapa | Técnica | Papel no trabalho |
 |---|---|---|
-| Leitura do documento | LLM multimodal (Claude) lendo o PDF nativamente: texto + imagem da página | Funciona também em notas escaneadas, sem OCR separado |
+| Leitura do documento | LLM multimodal (Gemini ou Claude) lendo o PDF nativamente: texto + imagem da página | Funciona também em notas escaneadas, sem OCR separado |
 | Extração alternativa | `pdfplumber` (texto do PDF) + LLM | Comparação de custo e precisão com a leitura direta |
 | Estruturação | *Structured outputs*: o modelo é obrigado a seguir o JSON Schema gerado do Pydantic | Elimina JSON malformado |
 | Verificação | Regras fiscais: DV do CNPJ (inclusive o alfanumérico de 2026), DV do CPF, DV da chave de acesso (mód. 11), soma dos itens, qtd × valor unitário | Detecta "alucinações" e gera uma pontuação de confiança |
 | Baseline | Expressões regulares sobre o texto extraído | Referência clássica, sem IA |
 
-Decisão: o **Tesseract foi descartado**, porque o Claude lê PDFs escaneados diretamente. Pode voltar como trabalho futuro (modelo local sem visão).
+Decisão: o **Tesseract foi descartado**, porque os modelos multimodais leem PDFs escaneados diretamente. Pode voltar como trabalho futuro (modelo local sem visão).
 
-**Provedor local (LM Studio):** além da Claude API, o backend aceita modelos locais via LM Studio (`PROVEDOR_IA=lmstudio`), usando a API compatível com OpenAI e saída restrita ao mesmo JSON Schema. Na abordagem "pdf", as páginas são convertidas em imagens (exige modelo com visão). Isso permite testar sem custo e comparar no TCC um **modelo local** (gratuito, dados não saem da máquina, LGPD) com a **nuvem** (mais preciso, pago).
+**Provedores de IA intercambiáveis:** o provedor é escolhido em `PROVEDOR_IA` no `.env`, sem mudar código. Todos recebem o mesmo prompt e a resposta é restrita ao mesmo JSON Schema:
+
+| Provedor | Uso no TCC |
+|---|---|
+| **Google Gemini** (padrão) | Desenvolvimento e testes, com o plano gratuito (só notas fictícias, pois o Google pode usar os dados) |
+| **Claude (Anthropic)** | Comparação com um modelo pago |
+| **LM Studio** | Modelo local: gratuito e os dados não saem da máquina (LGPD), mas menos preciso |
+| **API no padrão da OpenAI** | OpenAI, Groq, OpenRouter, Ollama e outros, para ampliar a comparação |
+
+Gemini e Claude recebem o PDF direto; LM Studio e as APIs no padrão da OpenAI recebem as páginas como imagens (exigem modelo com visão).
 
 ### Stack
 
-- **Backend:** Python 3.12+, FastAPI, Pydantic, SDK `anthropic`, pdfplumber, SQLAlchemy (SQLite no desenvolvimento, PostgreSQL opcional)
+- **Backend:** Python 3.12+, FastAPI, Pydantic, httpx, SDK `anthropic`, pdfplumber, SQLAlchemy (SQLite no desenvolvimento, PostgreSQL opcional)
 - **Frontend:** React + Vite
-- **IA:** Claude API (Anthropic). Modelo padrão: `claude-opus-5-5`, configurável por variável de ambiente para os experimentos (ex.: `claude-sonnet-5-5`, `claude-haiku-4-5`)
+- **IA:** Google Gemini por padrão (`gemini-3.5-flash`); Claude, LM Studio e APIs no padrão da OpenAI como alternativas. Provedor e modelo são configuráveis no `.env` para os experimentos
 - **Versionamento:** Git + GitHub (`PRIMEFiscal`)
 
-### Endpoints (v0)
+### Endpoints
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/api/saude` | Health check |
-| POST | `/api/notas` | Envia 1 PDF e processa de forma síncrona |
-| POST | `/api/notas/lote` | Envia N PDFs e processa em segundo plano |
-| GET | `/api/notas` | Lista notas (filtro opcional `lote_id`) |
+| GET | `/api/saude` | Situação da API, provedor de IA em uso e limites de envio |
+| POST | `/api/notas` | Envia um ou mais PDFs para a fila de processamento |
+| GET | `/api/notas` | Lista notas (filtros opcionais `status` e `lote_id`) |
+| DELETE | `/api/notas?status=...` | Remove as notas com a situação informada (`pendente` esvazia a fila) |
 | GET | `/api/notas/{id}` | Detalhe (JSON completo) |
+| GET | `/api/notas/{id}/pdf` | PDF original |
 | PUT | `/api/notas/{id}` | Correção manual e revalidação |
+| POST | `/api/notas/{id}/reprocessar` | Devolve a nota à fila |
+| DELETE | `/api/notas/{id}` | Remove a nota e o PDF guardado |
 
 Documentação automática em `http://localhost:8000/docs` (Swagger), usada como evidência de "integração com ERPs".
 
@@ -88,8 +101,8 @@ Documentação automática em `http://localhost:8000/docs` (Swagger), usada como
 
 | # | Comparação | Pergunta respondida |
 |---|---|---|
-| E1 | Baseline regex × Claude (texto) × Claude (PDF direto) | A IA supera regras fixas? Ler o PDF direto vale o custo? |
-| E2 | Opus 5.5 × Sonnet 5.5 × Haiku 4.5 × modelo local (LM Studio) | Qual a relação custo × precisão de cada modelo? Um modelo local gratuito é suficiente? |
+| E1 | Baseline regex × IA (texto do PDF) × IA (leitura visual) | A IA supera regras fixas? Ler o PDF direto vale o custo? |
+| E2 | Gemini × Claude × modelo local (LM Studio) × outras APIs | Qual a relação custo × precisão de cada modelo? Um modelo gratuito ou local é suficiente? |
 | E3 | Desempenho por tipo (NF-e × NFC-e × NFS-e) | Onde a extração é mais difícil? |
 | E4 | PDF nativo × escaneado | Qual o impacto da qualidade do documento? |
 | E5 | Taxa de erros detectados pela validação | As regras fiscais pegam as alucinações? |
@@ -111,7 +124,7 @@ Documentação automática em `http://localhost:8000/docs` (Swagger), usada como
 
 ## 4. LGPD e segurança
 
-- Notas contêm CPF, nomes e endereços. Enviá-las à API da Anthropic é uma transferência a um operador de dados. Isso deve ser documentado no relatório.
+- Notas contêm CPF, nomes e endereços. Enviá-las a uma API de IA (Google, Anthropic etc.) é uma transferência a um operador de dados. Isso deve ser documentado no relatório. No plano gratuito do Gemini, o Google pode usar os dados para melhorar seus produtos: usar só notas fictícias.
 - A chave da API fica em `.env` (nunca versionada).
 - Limitar o tamanho do upload e aceitar só `application/pdf`.
 - Trabalho futuro: anonimização antes do envio e modelo local.
@@ -171,10 +184,10 @@ A4 · margens: superior/esquerda 3 cm, inferior/direita 2 cm · Arial ou Times 1
 
 - [x] **Fase 0:** Planejamento e esqueleto do projeto
 - [ ] **Fase 1:** Montagem do dataset (PDF + XML) e anonimização
-- [ ] **Fase 2:** Extração com Claude (PDF direto e texto) + validação fiscal (*esqueleto pronto*)
+- [x] **Fase 2:** Extração com IA (PDF direto e texto, provedores intercambiáveis) + validação fiscal
 - [ ] **Fase 3:** Persistência, histórico e correção manual (*esqueleto pronto*)
 - [ ] **Fase 4:** Frontend completo (upload, revisão lado a lado com o PDF, histórico)
-- [ ] **Fase 5:** Processamento em lote robusto (fila, reprocessamento, status)
+- [x] **Fase 5:** Processamento em lote robusto (fila, reprocessamento, status)
 - [ ] **Fase 6:** Script de avaliação contra XML + baseline regex
 - [ ] **Fase 7:** Experimentos E1 a E5, gráficos e tabelas
 - [ ] **Fase 8:** Redação final do relatório, revisão ABNT e apresentação

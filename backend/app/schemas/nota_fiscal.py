@@ -105,6 +105,7 @@ class ResultadoValidacao(BaseModel):
 
 class Metadados(BaseModel):
     abordagem: str
+    provedor: str | None = Field(None, description="Nome do provedor de IA que fez a extração")
     modelo: str
     tokens_entrada: int | None = None
     tokens_saida: int | None = None

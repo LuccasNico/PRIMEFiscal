@@ -5,12 +5,12 @@ import { IconeLixeira, IconeRepetir } from './Icones.jsx'
 
 const FILTROS = [
   { id: 'todas', rotulo: 'Todas', aceita: () => true },
-  { id: 'ok', rotulo: 'OK', aceita: (nota) => nota.status === 'processada' || nota.status === 'revisada' },
+  { id: 'concluidas', rotulo: 'Concluídas', aceita: (nota) => nota.status === 'processada' || nota.status === 'revisada' },
   { id: 'revisar', rotulo: 'Revisar', aceita: (nota) => nota.status === 'revisar' },
-  { id: 'erro', rotulo: 'Erro', aceita: (nota) => nota.status === 'erro' },
+  { id: 'erro', rotulo: 'Com erro', aceita: (nota) => nota.status === 'erro' },
 ]
 
-/** Notas que já saíram da fila: extraídas (OK ou para revisar) ou com erro. */
+/** Notas que já saíram da fila: concluídas, para revisar, corrigidas ou com erro. */
 export default function ListaNotas({ notas, selecionadaId, aoSelecionar, aoRemover, aoReprocessar, aoReprocessarVarias }) {
   const [filtroId, setFiltroId] = useState('todas')
 
@@ -20,15 +20,15 @@ export default function ListaNotas({ notas, selecionadaId, aoSelecionar, aoRemov
   const escolhido = FILTROS.find((f) => f.id === filtroId)
   const filtro = notas.some(escolhido.aceita) ? escolhido : FILTROS[0]
   const visiveis = notas.filter(filtro.aceita)
-  const errosRepetiveis = notas.filter((nota) => nota.status === 'erro' && nota.tem_pdf)
+  const errosReprocessaveis = notas.filter((nota) => nota.status === 'erro' && nota.tem_pdf)
 
   return (
     <section className="cartao" aria-labelledby="titulo-notas">
       <div className="cabecalho-lista">
         <h2 id="titulo-notas">Notas processadas ({notas.length})</h2>
-        {errosRepetiveis.length > 1 && (
-          <button type="button" className="link" onClick={() => aoReprocessarVarias(errosRepetiveis.map((n) => n.id))}>
-            Repetir {errosRepetiveis.length} com erro
+        {errosReprocessaveis.length > 1 && (
+          <button type="button" className="link" onClick={() => aoReprocessarVarias(errosReprocessaveis.map((n) => n.id))}>
+            Reprocessar as {errosReprocessaveis.length} com erro
           </button>
         )}
       </div>
@@ -66,8 +66,8 @@ export default function ListaNotas({ notas, selecionadaId, aoSelecionar, aoRemov
                 type="button"
                 className="botao-icone"
                 onClick={() => aoReprocessar(nota.id)}
-                aria-label={`Tentar processar ${nota.arquivo} de novo`}
-                title="Tentar de novo"
+                aria-label={`Reprocessar ${nota.arquivo}`}
+                title="Reprocessar"
               >
                 <IconeRepetir />
               </button>
@@ -75,7 +75,7 @@ export default function ListaNotas({ notas, selecionadaId, aoSelecionar, aoRemov
             <BotaoConfirmar
               className="botao-icone"
               aoConfirmar={() => aoRemover(nota.id)}
-              rotuloConfirmar="Excluir?"
+              rotuloConfirmar="Excluir nota?"
               aria-label={`Excluir ${nota.arquivo}`}
               title="Excluir nota"
             >

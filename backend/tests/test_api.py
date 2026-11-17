@@ -13,7 +13,15 @@ def pdf(nome: str = "nota.pdf", conteudo: bytes | None = None):
 def test_saude(cliente):
     resposta = cliente.get("/api/saude")
     assert resposta.status_code == 200
-    assert resposta.json()["status"] == "ok"
+    assert resposta.json() == {
+        "status": "ok",
+        "provedor": "lmstudio",
+        "nome_provedor": "LM Studio",
+        "modelo": "primeiro modelo disponível",
+        "pdf_exige_visao": True,
+        "tamanho_maximo_mb": 1,
+        "maximo_de_arquivos_por_envio": 50,
+    }
 
 
 def test_nota_inexistente(cliente):
